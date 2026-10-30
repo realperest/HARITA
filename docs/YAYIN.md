@@ -2,7 +2,7 @@
 
 ## Kaynaklar
 
-1. Coolify: Yeni kaynak -> Public/Private Repository -> `realperest/HARITA` -> Build Pack: **Docker Compose**, dosya `docker-compose.yml`.
+1. Coolify: Yeni kaynak -> Public/Private Repository -> `realperest/HARITA` -> Build Pack: **Docker Compose**, dosya `docker-compose.yaml`.
 2. Ortam degiskenleri (`.env.example` ornek): `DB_SIFRE`, `YONETIM_ANAHTARI` (uzun rastgele), `KARO_GENEL_ADRESI`, `IZINLI_KOKEN_REGEX`.
 3. Alan adlari: `tiles` servisine karo alan adi (port 8080), `gateway` servisine API alan adi (port 8000).
    Diger servisler alan adi almaz.
