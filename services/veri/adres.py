@@ -173,6 +173,7 @@ def tablo_bekle(baglanti: psycopg.Connection) -> None:
     """Gateway adres semasini kurana kadar bekler."""
     import time
     for _ in range(180):
+        baglanti.rollback()
         if baglanti.execute("SELECT to_regclass('sokak') IS NOT NULL AND to_regclass('kapi_numarasi') IS NOT NULL").fetchone()[0]:
             return
         log.info("Adres semasi bekleniyor (gateway tablolari kurmali)...")

@@ -160,6 +160,7 @@ UPDATE yerlesim b SET merkez = s.merkez
 def tablo_bekle(baglanti: psycopg.Connection) -> None:
     """Gateway semayi kurana kadar bekler (en fazla ~30 dk)."""
     for _ in range(180):
+        baglanti.rollback()
         if baglanti.execute("SELECT to_regclass('yerlesim') IS NOT NULL").fetchone()[0]:
             return
         log.info("Sema bekleniyor (gateway tablolari kurmali)...")

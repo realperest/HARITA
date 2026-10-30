@@ -95,6 +95,7 @@ ISLEM_SQL = [
 def tablo_bekle(baglanti: psycopg.Connection) -> None:
     """Gateway bina semasini kurana kadar bekler."""
     for _ in range(180):
+        baglanti.rollback()
         if baglanti.execute("SELECT to_regclass('bina') IS NOT NULL").fetchone()[0]:
             return
         log.info("Bina semasi bekleniyor (gateway tablolari kurmali)...")
