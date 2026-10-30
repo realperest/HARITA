@@ -1,7 +1,8 @@
 # HARITA arama servisi: Photon (adres / yer arama, ters arama). Dizin ilk acilista gezegen dokumunden ULKE_KODLARI icin uretilir.
 FROM eclipse-temurin:21-jre
 
-ARG PHOTON_SURUMU=1.0.0
+# 1.0.0'da -country-codes bir NullPointerException ile coker; 1.3.0'da calisir (yerelde dogrulandi)
+ARG PHOTON_SURUMU=1.3.0
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates zstd \
  && rm -rf /var/lib/apt/lists/* \
  && curl -fsSL -o /opt/photon.jar "https://github.com/komoot/photon/releases/download/${PHOTON_SURUMU}/photon-${PHOTON_SURUMU}.jar"
