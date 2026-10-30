@@ -1,0 +1,245 @@
+/* HARITA deneme sayfasi: "Koyu teknik" stili (DESIGN.md). Gradyan, parlama ve golge yok. */
+:root {
+  --zemin: #0E1116;
+  --yuzey: #161B22;
+  --metin: #E6EDF3;
+  --metin-ikincil: #8B949E;
+  --vurgu: #3FB950;
+  --vurgu-metin: #0E1116;
+  --ikincil: #58A6FF;
+  --sinir: #2A313C;
+  --basari: #3FB950;
+  --uyari: #D29922;
+  --hata: #F85149;
+  --font-baslik: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-govde: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-sayi: "JetBrains Mono", Consolas, monospace;
+  --radius-buton: 6px;
+  --radius-kart: 6px;
+  --radius-alan: 6px;
+  --golge-kart: none;
+  --panel-genislik: 380px;
+  --arac-yukseklik: 40px;
+}
+
+:root[data-theme="light"] {
+  --zemin: #F6F8FA;
+  --yuzey: #FFFFFF;
+  --metin: #1F2328;
+  --metin-ikincil: #59636E;
+  --vurgu: #1A7F37;
+  --vurgu-metin: #FFFFFF;
+  --ikincil: #0969DA;
+  --sinir: #D0D7DE;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--zemin);
+  color: var(--metin);
+  font-family: var(--font-govde);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+body {
+  display: grid;
+  grid-template-rows: var(--arac-yukseklik) 1fr;
+  overflow: hidden;
+}
+
+.mono, .okuma, .ham, .durum-liste, .surum { font-family: var(--font-sayi); font-variant-numeric: tabular-nums; }
+.soluk { color: var(--metin-ikincil); }
+
+/* Ust arac cubugu */
+.arac {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px;
+  background: var(--yuzey);
+  border-bottom: 1px solid var(--sinir);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.marka { font-weight: 600; letter-spacing: 0.02em; }
+.okuma { font-size: 12px; min-width: 70px; }
+.alan-satir { display: flex; align-items: center; gap: 6px; }
+.panel-ac { display: none; }
+
+/* Duzen */
+.duzen {
+  display: grid;
+  grid-template-columns: var(--panel-genislik) 1fr;
+  min-height: 0;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--yuzey);
+  border-right: 1px solid var(--sinir);
+}
+.harita-kap { position: relative; min-width: 0; min-height: 0; }
+.harita { position: absolute; inset: 0; }
+
+/* Sekmeler */
+.sekmeler { display: flex; border-bottom: 1px solid var(--sinir); }
+.sekme-dugme {
+  flex: 1;
+  padding: 8px 4px;
+  background: transparent;
+  color: var(--metin-ikincil);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.sekme-dugme:hover { background: var(--zemin); }
+.sekme-dugme.aktif { color: var(--metin); border-bottom-color: var(--vurgu); }
+.sekme { display: none; padding: 10px; overflow-y: auto; min-height: 0; flex: 1; }
+.sekme.aktif { display: block; }
+
+/* Form ogeleri */
+.alan { display: block; margin-bottom: 8px; color: var(--metin-ikincil); font-size: 12px; }
+.alan.genis { flex: 1; }
+.girdi {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 6px 8px;
+  background: var(--zemin);
+  color: var(--metin);
+  border: 1px solid var(--sinir);
+  border-radius: var(--radius-alan);
+  font: inherit;
+}
+.alan-satir .girdi { margin-top: 0; width: auto; }
+.girdi:focus-visible, .dugme:focus-visible, .sekme-dugme:focus-visible, .liste button:focus-visible {
+  outline: 2px solid var(--ikincil);
+  outline-offset: 1px;
+}
+.satir { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
+.dugme {
+  padding: 6px 12px;
+  background: var(--vurgu);
+  color: var(--vurgu-metin);
+  border: 1px solid var(--vurgu);
+  border-radius: var(--radius-buton);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dugme.ikincil { background: transparent; color: var(--metin); border-color: var(--sinir); }
+.dugme.ikincil:hover { background: var(--zemin); }
+.dugme:disabled { opacity: 0.5; cursor: default; }
+
+.baslik { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--metin-ikincil); text-transform: uppercase; letter-spacing: 0.06em; }
+.not { margin: 8px 0; color: var(--metin-ikincil); font-size: 12px; }
+.mesaj { min-height: 18px; margin: 6px 0; font-size: 12px; color: var(--metin-ikincil); }
+.mesaj.hata { color: var(--hata); }
+.mesaj.uyari { color: var(--uyari); }
+.mesaj.basari { color: var(--basari); }
+
+/* Listeler */
+.liste { list-style: none; margin: 0; padding: 0; border: 1px solid var(--sinir); border-radius: var(--radius-kart); }
+.liste:empty { display: none; }
+.liste li + li { border-top: 1px solid var(--sinir); }
+.liste button {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  background: transparent;
+  color: var(--metin);
+  border: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.liste button:hover { background: var(--zemin); }
+.liste .ad { font-weight: 500; }
+.liste .alt { color: var(--metin-ikincil); font-size: 12px; }
+.durak-liste { list-style: none; }
+.durak-liste li { display: flex; align-items: center; gap: 8px; padding: 5px 9px; }
+.durak-liste .etiket { color: var(--vurgu); font-family: var(--font-sayi); font-weight: 500; width: 18px; }
+.durak-liste .koordinat { flex: 1; font-family: var(--font-sayi); font-size: 12px; }
+.durak-liste button { width: auto; padding: 2px 8px; border: 1px solid var(--sinir); border-radius: var(--radius-buton); }
+
+/* Sonuc kartlari ve tablolar */
+.kart { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--sinir); border-radius: var(--radius-kart); background: var(--zemin); }
+.kart h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--metin-ikincil); text-transform: uppercase; letter-spacing: 0.06em; }
+.zincir { font-weight: 500; }
+.sayi { font-family: var(--font-sayi); font-variant-numeric: tabular-nums; }
+.tablo { width: 100%; border-collapse: collapse; font-family: var(--font-sayi); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tablo th, .tablo td { padding: 4px 6px; border-bottom: 1px solid var(--sinir); text-align: right; }
+.tablo th { position: sticky; top: 0; background: var(--yuzey); color: var(--metin-ikincil); font-weight: 500; }
+.tablo tbody tr:hover { background: var(--yuzey); }
+.ham { max-height: 220px; overflow: auto; margin: 8px 0; padding: 8px; background: var(--zemin); border: 1px solid var(--sinir); border-radius: var(--radius-kart); font-size: 11px; white-space: pre-wrap; }
+
+/* Durum rozeti: kucuk nokta + metin */
+.durum-liste { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.durum-liste li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--metin-ikincil); }
+.nokta.acik { background: var(--basari); }
+.nokta.kapali { background: var(--hata); }
+
+/* Harita ustu ogeler */
+.durak-isaret {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: var(--vurgu);
+  color: var(--vurgu-metin);
+  border: 1px solid var(--zemin);
+  border-radius: 4px;
+  font-family: var(--font-sayi);
+  font-size: 12px;
+  font-weight: 500;
+}
+.pin-isaret {
+  width: 18px;
+  height: 18px;
+  background: var(--hata);
+  border: 2px solid #FFFFFF;
+  border-radius: 50%;
+}
+.leaflet-container { background: var(--zemin); font-family: var(--font-govde); }
+.leaflet-control-attribution { background: var(--yuzey) !important; color: var(--metin-ikincil) !important; }
+.leaflet-control-attribution a { color: var(--ikincil) !important; }
+.mt-logo { position: absolute; z-index: 1000; left: 8px; bottom: 26px; z-index: 2; }
+.mt-logo img { display: block; height: 22px; }
+.maplibregl-ctrl-attrib { background: var(--yuzey) !important; color: var(--metin-ikincil) !important; }
+.maplibregl-ctrl-attrib a { color: var(--ikincil) !important; }
+
+/* Surum: sag alt, son 3 guncelleme kalin; en yeni gorulene kadar yesil */
+.surum {
+  position: fixed;
+  right: 8px;
+  bottom: 6px;
+  z-index: 5;
+  padding: 4px 8px;
+  background: var(--yuzey);
+  border: 1px solid var(--sinir);
+  border-radius: var(--radius-kart);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+  pointer-events: none;
+}
+.surum div { color: var(--metin); }
+.surum div.yeni { color: var(--basari); }
+
+/* Dar ekran: panel haritanin altinda cekmece olur */
+@media (max-width: 860px) {
+  .panel-ac { display: inline-block; }
+  .duzen { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .panel { grid-row: 2; border-right: 0; border-top: 1px solid var(--sinir); max-height: 46vh; }
+  .panel.kapali { display: none; }
+  .harita-kap { grid-row: 1; }
+  .okuma { display: none; }
+}

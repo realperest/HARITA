@@ -11,7 +11,7 @@
  * Not: anahtar tarayicida gorunur. Tarayici anahtarlarini projede yalniz kendi alan adiniza kisitlayin
  * (yonetim: PATCH /yonetim/projeler/{id} kaynaklar); sunucu tarafi anahtarlari ayri tutun.
  */
-import maplibregl from 'https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/+esm';
+import * as maplibregl from 'https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/+esm';
 import { layers, namedFlavor } from 'https://cdn.jsdelivr.net/npm/@protomaps/basemaps@5.7.2/+esm';
 
 const BASLIK = 'X-Harita-Anahtar';

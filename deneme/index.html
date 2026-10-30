@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HARITA Deneme</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="deneme.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/protomaps-leaflet@5.1.0/dist/protomaps-leaflet.js"></script>
+</head>
+<body>
+  <header class="arac">
+    <button class="dugme ikincil panel-ac" id="panel-ac" type="button" aria-label="Paneli aç veya kapat">Panel</button>
+    <span class="marka">HARITA <span class="soluk">deneme</span></span>
+    <label class="alan-satir">
+      <span class="soluk">Motor</span>
+      <select id="motor" class="girdi">
+        <option value="maplibre">MapLibre (vektör, WebGL)</option>
+        <option value="leaflet">Leaflet (SIPARIS ile aynı)</option>
+      </select>
+    </label>
+    <label class="alan-satir">
+      <span class="soluk">Katman</span>
+      <select id="katman" class="girdi"></select>
+    </label>
+    <span class="okuma"><span class="soluk">z</span> <span id="okuma-zoom">-</span></span>
+    <span class="okuma"><span class="soluk">imleç</span> <span id="okuma-imlec">-</span></span>
+    <button class="dugme ikincil" id="tema" type="button">Tema</button>
+  </header>
+
+  <div class="duzen">
+    <aside class="panel" id="panel">
+      <nav class="sekmeler" role="tablist" aria-label="Özellikler">
+        <button class="sekme-dugme aktif" role="tab" data-sekme="baglanti" type="button">Bağlantı</button>
+        <button class="sekme-dugme" role="tab" data-sekme="ara" type="button">Ara</button>
+        <button class="sekme-dugme" role="tab" data-sekme="pin" type="button">Pin</button>
+        <button class="sekme-dugme" role="tab" data-sekme="yerlesim" type="button">Yerleşim</button>
+        <button class="sekme-dugme" role="tab" data-sekme="rota" type="button">Rota</button>
+      </nav>
+
+      <section class="sekme aktif" id="sekme-baglanti" role="tabpanel">
+        <label class="alan">API adresi
+          <input class="girdi mono" id="api-adres" type="url" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="alan">Harita anahtarı
+          <input class="girdi mono" id="api-anahtar" type="password" autocomplete="off" spellcheck="false" placeholder="hk_...">
+        </label>
+        <label class="alan">MapTiler anahtarı (isteğe bağlı: hibrit, uydu, sokak, ayrıntılı)
+          <input class="girdi mono" id="mt-anahtar" type="password" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="satir">
+          <button class="dugme" id="baglan" type="button">Kaydet ve bağlan</button>
+          <button class="dugme ikincil" id="durum-yenile" type="button">Durumu yenile</button>
+        </div>
+        <p class="mesaj" id="baglanti-mesaj" role="status"></p>
+        <h2 class="baslik">Servis durumu</h2>
+        <ul class="durum-liste" id="durum-liste"></ul>
+        <p class="not">MapTiler katmanları dış servistir. Anahtarın izinli adreslerine bu sayfanın adresi eklenmelidir.</p>
+      </section>
+
+      <section class="sekme" id="sekme-ara" role="tabpanel">
+        <label class="alan">Adres veya yer (metinden konuma)
+          <input class="girdi mono" id="ara-girdi" type="search" autocomplete="off" placeholder="/ ile odaklan: çorlu cumhuriyet mah." spellcheck="false">
+        </label>
+        <p class="mesaj" id="ara-mesaj" role="status"></p>
+        <ul class="liste" id="ara-liste"></ul>
+        <pre class="ham" id="ara-ham" hidden></pre>
+      </section>
+
+      <section class="sekme" id="sekme-pin" role="tabpanel">
+        <p class="not">Haritaya tıklayın: pinin il, ilçe, mahalle/köy bilgisi, en yakın adres ve yakın merkezler gelir.</p>
+        <p class="mesaj" id="pin-mesaj" role="status"></p>
+        <div id="pin-sonuc"></div>
+      </section>
+
+      <section class="sekme" id="sekme-yerlesim" role="tabpanel">
+        <div class="satir">
+          <label class="alan genis">Ad (il, ilçe, mahalle, köy...)
+            <input class="girdi mono" id="yer-girdi" type="search" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="alan">Tür
+            <select class="girdi" id="yer-tur">
+              <option value="">Hepsi</option>
+              <option value="il">İl</option>
+              <option value="ilce">İlçe</option>
+              <option value="mahalle_koy">Mahalle / Köy</option>
+              <option value="sehir">Şehir</option>
+              <option value="kasaba">Kasaba</option>
+              <option value="koy">Köy merkezi</option>
+              <option value="mezra">Mezra</option>
+              <option value="semt">Semt</option>
+            </select>
+          </label>
+        </div>
+        <p class="mesaj" id="yer-mesaj" role="status"></p>
+        <ul class="liste" id="yer-liste"></ul>
+        <div id="yer-detay"></div>
+      </section>
+
+      <section class="sekme" id="sekme-rota" role="tabpanel">
+        <p class="not">Haritaya tıklayarak durak ekleyin (en az 2).</p>
+        <label class="alan">Profil
+          <select class="girdi" id="rota-profil">
+            <option value="auto">Araba</option>
+            <option value="motosiklet">Motosiklet</option>
+            <option value="bisiklet">Bisiklet</option>
+            <option value="yaya">Yaya</option>
+          </select>
+        </label>
+        <ol class="liste durak-liste" id="durak-liste"></ol>
+        <div class="satir">
+          <button class="dugme" id="rota-ciz" type="button">Rota çiz</button>
+          <button class="dugme ikincil" id="matris-hesapla" type="button">Matris</button>
+          <button class="dugme ikincil" id="rota-temizle" type="button">Temizle</button>
+        </div>
+        <p class="mesaj" id="rota-mesaj" role="status"></p>
+        <div id="rota-sonuc"></div>
+      </section>
+    </aside>
+
+    <div class="harita-kap">
+      <div id="harita" class="harita"></div>
+      <a class="mt-logo" id="mt-logo" href="https://www.maptiler.com/" target="_blank" rel="noopener" hidden>
+        <img src="https://api.maptiler.com/resources/logo.svg" alt="MapTiler">
+      </a>
+    </div>
+  </div>
+
+  <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
+  <script type="module" src="deneme.js?v=261030.2310"></script>
+</body>
+</html>
