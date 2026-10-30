@@ -96,6 +96,35 @@ async def test_yerler_kutuda_ve_sokak_listeleri(istemci, adres_tohum):
     assert kapilar[0]["ek"]["kapi_no"] == "12"
 
 
+async def test_kolaylik_uclari(istemci, tohum, adres_tohum):
+    b = await baslik(istemci)
+    yakin = (await istemci.get("/v1/adres/yakin?lat=41.16&lon=27.805&yaricap_m=500&tur=eczane", headers=b)).json()
+    assert yakin[0]["ad"] == "Deniz Eczanesi" and yakin[0]["mesafe_m"] < 500
+    boyunca = (await istemci.post("/v1/adres/rota-boyunca", headers=b, json={
+        "koordinatlar": [[27.800, 41.1595], [27.810, 41.1610]], "tur": "eczane", "tampon_m": 300})).json()
+    assert boyunca[0]["ad"] == "Deniz Eczanesi" and 0 <= boyunca[0]["ek"]["rota_orani"] <= 1
+    # il > ilce > mahalle > sokak > bina / kapi zinciri tek uctan
+    assert [x["ad"] for x in (await istemci.get(f"/v1/adres/alt?ust=il:{tohum['il']}", headers=b)).json()] == ["Çorlu"]
+    assert [x["ad"] for x in (await istemci.get(f"/v1/adres/alt?ust=ilce:{tohum['ilce']}", headers=b)).json()] == ["Cumhuriyet Mahallesi"]
+    assert [x["ad"] for x in (await istemci.get(f"/v1/adres/alt?ust=mahalle_koy:{tohum['mahalle']}", headers=b)).json()] == ["Namık Kemal Bulvarı"]
+    assert (await istemci.get(f"/v1/adres/alt?ust=sokak:{adres_tohum['sokak']}&cocuk=kapi", headers=b)).json()[0]["ek"]["kapi_no"] == "12"
+    assert (await istemci.get(f"/v1/adres/alt?ust=sokak:{adres_tohum['sokak']}", headers=b)).json()[0]["ad"] == "Güneş Apartmanı"
+    assert (await istemci.get("/v1/adres/alt?ust=hatali", headers=b)).status_code == 422
+    # sekil: sinir / cizgi / poligon
+    assert (await istemci.get(f"/v1/adres/sekil?tur=mahalle_koy&id={tohum['mahalle']}", headers=b)).json()["geometri"]["type"] == "MultiPolygon"
+    assert (await istemci.get(f"/v1/adres/sekil?tur=sokak&id={adres_tohum['sokak']}", headers=b)).json()["geometri"]["type"] == "MultiLineString"
+    assert (await istemci.get(f"/v1/adres/sekil?tur=bina&id={adres_tohum['bina']}", headers=b)).json()["geometri"]["type"] == "Polygon"
+    # binanin yolu
+    assert (await istemci.get(f"/v1/adres/bina/{adres_tohum['bina']}", headers=b)).json()["ek"]["sokak"]["ad"] == "Namık Kemal Bulvarı"
+    # karo (z=15) ile yer katmani: 27.8052 / 41.1602 karosu
+    import math
+    z, n = 15, 2 ** 15
+    x = int((27.8051 + 180) / 360 * n)
+    y = int((1 - math.asinh(math.tan(math.radians(41.1602))) / math.pi) / 2 * n)
+    karo = (await istemci.get(f"/v1/adres/yerler/karo?x={x}&y={y}&z={z}&tur=eczane", headers=b)).json()
+    assert any(f["properties"]["ad"] == "Deniz Eczanesi" for f in karo["features"])
+
+
 async def test_nominatim_ve_photon_uyumu(istemci, adres_tohum):
     b = await baslik(istemci)
     n = (await istemci.get("/nominatim/search?q=namik kemal bulvari 12", headers=b)).json()

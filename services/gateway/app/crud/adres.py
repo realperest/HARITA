@@ -252,6 +252,48 @@ async def bina_getir(bina_id: int, sinir: bool) -> dict | None:
     if s is None:
         return None
     veri = _kayit("bina", s, s["ad"], [s["ad"]], None, {"bina_turu": s["bina_turu"], "kullanim": s["kullanim"], "sokak_id": s["sokak_id"]})
+    if s["sokak_id"]:
+        ust = await sokak_getir(s["sokak_id"], False)
+        veri["ek"]["sokak"] = {"id": ust["id"], "ad": ust["ad"]} if ust else None
     if sinir:
         veri["sinir"] = json.loads(s["geo"]) if s["geo"] else None
     return veri
+
+
+async def yakin_yerler(lat: float, lon: float, yaricap_m: int, tur: str | None, limit: int) -> list[dict]:
+    """Noktaya yaricap icindeki onemli yerler (or. akaryakit, yeme_icme, otel), yakindan uzaga."""
+    p = "ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography"
+    async with havuz().acquire() as baglanti:
+        satirlar = await baglanti.fetch(
+            f"""SELECT x.id, x.ad, t.kod AS yer_turu, ST_Y(x.konum::geometry) AS lat, ST_X(x.konum::geometry) AS lon,
+                       ST_Distance(x.konum, {p}) AS mesafe, {ZINCIR_ALAN}
+                  FROM yer_isareti x JOIN tnm_yer_turu t ON t.id = x.tur_id {ZINCIR_JOIN}
+                 WHERE x.aktif_mi AND ST_DWithin(x.konum, {p}, $3) AND ($4::text IS NULL OR t.kod = $4)
+                 ORDER BY x.konum <-> {p} LIMIT $5""", lat, lon, yaricap_m, tur, limit)
+    return [_kayit("yer", s, s["ad"], [s["ad"]], None, {"yer_turu": s["yer_turu"]}) for s in satirlar]
+
+
+async def rota_boyunca(koordinatlar: list[list[float]], tur: str | None, tampon_m: int, limit: int) -> list[dict]:
+    """Rota cizgisine tampon_m icindeki yerler; rota uzerindeki konumlarina (oran 0-1) gore sirali (or. rota boyunca benzin)."""
+    wkt = "SRID=4326;LINESTRING(" + ",".join(f"{k[0]} {k[1]}" for k in koordinatlar) + ")"
+    async with havuz().acquire() as baglanti:
+        satirlar = await baglanti.fetch(
+            f"""WITH hat AS (SELECT ST_GeogFromText($1) AS g)
+                SELECT x.id, x.ad, t.kod AS yer_turu, ST_Y(x.konum::geometry) AS lat, ST_X(x.konum::geometry) AS lon,
+                       ST_Distance(x.konum, hat.g) AS mesafe, ST_LineLocatePoint(hat.g::geometry, x.konum::geometry) AS oran, {ZINCIR_ALAN}
+                  FROM hat, yer_isareti x JOIN tnm_yer_turu t ON t.id = x.tur_id {ZINCIR_JOIN}
+                 WHERE x.aktif_mi AND ST_DWithin(x.konum, hat.g, $2) AND ($3::text IS NULL OR t.kod = $3)
+                 ORDER BY oran LIMIT $4""", wkt, tampon_m, tur, limit)
+    return [_kayit("yer", s, s["ad"], [s["ad"]], None, {"yer_turu": s["yer_turu"], "rota_orani": round(float(s["oran"]), 4)}) for s in satirlar]
+
+
+async def sekil(tur: str, nesne_id: int) -> dict | None:
+    """Herhangi bir adres ogesinin GeoJSON sekli (il / ilce / mahalle ... sinir; sokak cizgi; bina / site poligon)."""
+    if tur == "sokak":
+        veri = await sokak_getir(nesne_id, True)
+        return veri and {"tur": "sokak", "id": nesne_id, "ad": veri["ad"], "geometri": veri["cizgi"]}
+    if tur == "bina":
+        veri = await bina_getir(nesne_id, True)
+        return veri and {"tur": "bina", "id": nesne_id, "ad": veri["ad"], "geometri": veri["sinir"]}
+    veri = await yerlesim_crud.getir(nesne_id, True)
+    return veri and {"tur": veri["tur"], "id": nesne_id, "ad": veri["ad"], "geometri": veri["sinir"]}

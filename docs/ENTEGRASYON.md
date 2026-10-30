@@ -21,6 +21,12 @@ Ortak kurallar:
 | Ters arama | `GET /v1/adres/nokta?lat=&lon=` | Adres metni, il / ilce / mahalle, en yakin sokak, kapi, yerler |
 | Yer katmani | `GET /v1/adres/yerler?bati&guney&dogu&kuzey&tur=` | Haritada nokta olarak cizmek icin GeoJSON |
 | Sokak / kapi | `GET /v1/adres/mahalle/{id}/sokaklar`, `/v1/adres/sokak/{id}?cizgi=true`, `/v1/adres/sokak/{id}/kapilar` | Acilir liste (ilce > mahalle > sokak > kapi) |
+| Adres agaci | `GET /v1/adres/alt?ust=il:34` (ilce:, mahalle_koy:, sokak: ; `cocuk=bina|kapi`) | Acilir listeler tek uctan: il > ilce > mahalle/koy > sokak > site-bina / kapi |
+| Sekil | `GET /v1/adres/sekil?tur=&id=` | Herhangi bir ogenin GeoJSON'u (sinir, sokak cizgisi, bina poligonu) |
+| Site / bina | `GET /v1/adres/mahalle/{id}/binalar`, `/v1/adres/sokak/{id}/binalar`, `/v1/adres/bina/{id}` | Binanin sokagi `ek.sokak` icinde |
+| Yer katmani (karo) | `GET /v1/adres/yerler/karo?x=&y=&z=15` | Karo bazli onbellekleme icin |
+| Yakin yerler | `GET /v1/adres/yakin?lat&lon&yaricap_m&tur=akaryakit` | En yakin benzin, mola, otel vb. |
+| Rota boyunca | `POST /v1/adres/rota-boyunca` `{koordinatlar, tur, tampon_m}` | Rota cizgisi boyunca yerler, rota sirasina gore |
 | Nominatim uyumlu | `GET /nominatim/search?q=`, `/nominatim/reverse?lat=&lon=` | Nominatim bekleyen istemciler |
 | Photon uyumlu | `GET /photon/api?q=`, `/photon/reverse` | Photon bekleyen istemciler (kendi indeksimizden) |
 | Photon (ham) | `GET /v1/arama`, `/v1/ters-arama` | Gezegen Photon indeksi; kendi adres indeksimiz hazir oldugu icin ikincil |
