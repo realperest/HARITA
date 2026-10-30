@@ -4,10 +4,12 @@
 
 services:
   db:
-    mem_limit: 1g
+    mem_limit: 2g
     # PostGIS: anahtar kayitlari + yerlesim (il / ilce / mahalle-koy) verisi
     image: postgis/postgis:17-3.5
     restart: unless-stopped
+    # Buyuk adres yuklemesi icin (milyonlarca satir): daha cok bellek ve seyrek kontrol noktasi
+    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "max_wal_size=4GB", "-c", "maintenance_work_mem=256MB", "-c", "work_mem=32MB"]
     environment:
       POSTGRES_DB: harita
       POSTGRES_USER: harita
@@ -41,6 +43,7 @@ services:
       KAPSAM_KUTUSU: ${KAPSAM_KUTUSU:-25.6,35.8,44.9,42.2}
       MAKS_YAKINLASTIRMA: ${MAKS_YAKINLASTIRMA:-15}
       IZINLI_KOKEN_REGEX: ${IZINLI_KOKEN_REGEX:-.*}
+      KARO_GENEL_ADRESI: ${KARO_GENEL_ADRESI:?KARO_GENEL_ADRESI gerekli}
     volumes:
       - harita_karo:/veri
     expose:

@@ -32,7 +32,8 @@ fi
 
 envsubst '${IZINLI_KOKEN_REGEX}' < /etc/nginx/harita.conf.template > /etc/nginx/nginx.conf
 
-pmtiles serve "$VERI_DIZINI" --port=8081 &
+# TileJSON (/tiles/turkiye.json) icin genel adres gerekir
+pmtiles serve "$VERI_DIZINI" --port=8081 --public-url="${KARO_GENEL_ADRESI:-http://localhost:8080}/tiles" &
 PMTILES_PID=$!
 nginx -g 'daemon off;' &
 NGINX_PID=$!

@@ -16,6 +16,8 @@ from pathlib import Path
 import osmium
 import psycopg
 
+import adres
+
 log = logging.getLogger("yukle")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -230,7 +232,12 @@ def main() -> None:
                 if calisma_gerekli(baglanti):
                     yukle(baglanti)
                 else:
-                    log.info("Veri guncel, yukleme gerekmiyor.")
+                    log.info("Yerlesim verisi guncel, yukleme gerekmiyor.")
+                adres.tablo_bekle(baglanti)
+                if adres.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
+                    adres.calistir(baglanti, indir, kaynak_tarihi, ad_katla, VERI_DIZINI)
+                else:
+                    log.info("Adres verisi guncel, yukleme gerekmiyor.")
         except Exception:
             log.exception("Yukleyici dongusunde hata; bir sonraki kontrolde yeniden denenecek")
         if TEK_SEFER:
