@@ -62,7 +62,7 @@ services:
       build_elevation: "False"
       serve_tiles: "True"
     volumes:
-      - harita_rota:/custom_files
+      - harita_rota2:/custom_files
     expose:
       - "8002"
 
@@ -126,5 +126,5 @@ volumes:
   harita_pg:
   harita_veri:
   harita_karo:
-  harita_rota:
+  harita_rota2:
   harita_arama:
