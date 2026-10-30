@@ -47,6 +47,9 @@ curl -X POST https://HARITA-API/yonetim/projeler -H "X-Yonetim-Anahtari: ..." -H
 | `GET /v1/yerlesim/nokta` | Noktanin il / ilce / mahalle-koy bilgisi ve en yakin merkez |
 | `GET /v1/yerlesim/yakin` | Yaricap icindeki merkezler |
 | `GET /v1/yerlesim/{id}`, `/{id}/alt` | Ayrinti (zincir, GeoJSON sinir) ve alt ogeler (ilin ilceleri vb.) |
+| `GET /v1/adres/ara`, `/nokta`, `/yerler`, `/mahalle/{id}/sokaklar`, `/sokak/{id}` | Sokak, kapi numarasi, onemli yerler: arama, ters arama, harita katmani, acilir listeler |
+| `GET /nominatim/*`, `/photon/*` | Nominatim ve Photon uyumlu uclar (kendi adres indeksimizden) |
+| `POST /valhalla/{route,isochrone,optimized_route,trace_attributes,...}` | Valhalla'nin tum API'si (izokron, harita eslestirme, optimize rota) |
 | `/yonetim/*` | Proje ve anahtar yonetimi |
 | `GET /saglik`, `GET /saglik/hazir` | Canlilik / hazirlik |
 
