@@ -28,6 +28,10 @@
       <span class="soluk">Katman</span>
       <select id="katman" class="girdi"></select>
     </label>
+    <label class="alan-satir">
+      <input type="checkbox" id="yer-katmani">
+      <span class="soluk">Yerler</span>
+    </label>
     <span class="okuma"><span class="soluk">z</span> <span id="okuma-zoom">-</span></span>
     <span class="okuma"><span class="soluk">imleç</span> <span id="okuma-imlec">-</span></span>
     <button class="dugme ikincil" id="tema" type="button">Tema</button>
@@ -118,8 +122,18 @@
           <button class="dugme ikincil" id="matris-hesapla" type="button">Matris</button>
           <button class="dugme ikincil" id="rota-temizle" type="button">Temizle</button>
         </div>
+        <div class="satir">
+          <button class="dugme ikincil" id="rota-optimize" type="button">Optimize rota (3+ durak)</button>
+        </div>
+        <div class="satir">
+          <label class="alan genis">Erişim alanı (dakika, ilk durak veya pinden)
+            <input class="girdi mono" id="izokron-sure" type="text" value="5,10,15" autocomplete="off" spellcheck="false">
+          </label>
+          <button class="dugme ikincil" id="izokron-hesapla" type="button">Alanı çiz</button>
+        </div>
         <p class="mesaj" id="rota-mesaj" role="status"></p>
         <div id="rota-sonuc"></div>
+        <div id="matris-sonuc"></div>
       </section>
     </aside>
 
@@ -132,6 +146,6 @@
   </div>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="deneme.js?v=261030.2333"></script>
+  <script type="module" src="deneme.js?v=261031.0022"></script>
 </body>
 </html>

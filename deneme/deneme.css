@@ -201,6 +201,15 @@ body {
   font-size: 12px;
   font-weight: 500;
 }
+.renk-nokta {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--renk, var(--vurgu));
+}
+.alan-satir input[type="checkbox"] { accent-color: var(--vurgu); }
 .pin-isaret {
   width: 18px;
   height: 18px;

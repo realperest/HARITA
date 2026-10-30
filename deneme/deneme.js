@@ -14,7 +14,7 @@ const MT_ATIF = '<a href="https://www.maptiler.com/copyright/" target="_blank" r
 
 const TUR_ETIKET = {
   il: 'İl', ilce: 'İlçe', mahalle_koy: 'Mahalle / Köy', sehir: 'Şehir merkezi', kasaba: 'Kasaba',
-  koy: 'Köy merkezi', mezra: 'Mezra', semt: 'Semt',
+  koy: 'Köy merkezi', mezra: 'Mezra', semt: 'Semt', sokak: 'Sokak', kapi: 'Kapı no', yer: 'Yer',
 };
 
 /** Secilebilir katmanlar. tur: vektor (kendi karolarimiz), mt (MapTiler raster), karma (uydu + kendi yol ve etiketlerimiz) */
@@ -31,6 +31,14 @@ const KATMANLAR = [
   { kod: 'karma', grup: 'Karma', ad: 'Uydu + kendi yol ve etiketlerimiz (yalnız MapLibre)', tur: 'karma', harita: 'satellite', uzanti: 'jpg' },
 ];
 
+/** Her rota icin sirayla farkli renk. */
+const ROTA_RENKLERI = ['#3FB950', '#58A6FF', '#D29922', '#F85149', '#BC8CFF', '#39C5CF', '#FF7B72', '#E3B341'];
+const IZOKRON_RENKLERI = ['#3FB950', '#D29922', '#F85149', '#BC8CFF', '#58A6FF'];
+const YER_RENKLERI = {
+  eczane: '#F85149', saglik: '#F85149', egitim: '#BC8CFF', ibadet: '#39C5CF', kamu: '#58A6FF', banka: '#D29922',
+  akaryakit: '#8B949E', yeme_icme: '#FF7B72', market: '#3FB950', firin: '#E3B341', otel: '#58A6FF', dukkan: '#8B949E',
+};
+
 const durum = {
   api: VARSAYILAN_API,
   anahtar: '',
@@ -40,7 +48,7 @@ const durum = {
   motorAd: 'maplibre',
   sekme: 'baglanti',
   goruntu: { lat: 39.0, lon: 35.0, zoom: 5.5 },
-  veri: { pin: null, duraklar: [], sinir: null, rota: null, yakin: [] },
+  veri: { pin: null, duraklar: [], sinir: null, rotalar: [], yakin: [], yerler: null, izokron: null },
 };
 let motor = null;
 
@@ -234,14 +242,25 @@ class MapLibreMotoru {
 
   kaplamaKur() {
     const h = this.h;
-    for (const id of ['sinir', 'rota', 'yakin']) {
+    for (const id of ['sinir', 'rotalar', 'yakin', 'izokron', 'yerler']) {
       if (!h.getSource(id)) h.addSource(id, { type: 'geojson', data: BOS_KOLEKSIYON });
     }
+    h.addLayer({ id: 'izokron-dolgu', type: 'fill', source: 'izokron', paint: { 'fill-color': ['get', 'renk'], 'fill-opacity': 0.16 } });
+    h.addLayer({ id: 'izokron-cizgi', type: 'line', source: 'izokron', paint: { 'line-color': ['get', 'renk'], 'line-width': 2 } });
     h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#58A6FF', 'fill-opacity': 0.15 } });
     h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#58A6FF', 'line-width': 2 } });
     h.addLayer({
-      id: 'rota-cizgi', type: 'line', source: 'rota',
-      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3FB950', 'line-width': 5 },
+      id: 'rota-cizgi', type: 'line', source: 'rotalar',
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'renk'], 'line-width': 5 },
+    });
+    h.addLayer({
+      id: 'yerler-nokta', type: 'circle', source: 'yerler',
+      paint: { 'circle-radius': 4, 'circle-color': ['get', 'renk'], 'circle-stroke-color': '#0E1116', 'circle-stroke-width': 1 },
+    });
+    h.addLayer({
+      id: 'yerler-ad', type: 'symbol', source: 'yerler', minzoom: 16,
+      layout: { 'text-field': ['get', 'ad'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-offset': [0, 0.9], 'text-anchor': 'top' },
+      paint: { 'text-color': '#E6EDF3', 'text-halo-color': '#0E1116', 'text-halo-width': 1.2 },
     });
     h.addLayer({
       id: 'yakin-nokta', type: 'circle', source: 'yakin',
@@ -253,8 +272,10 @@ class MapLibreMotoru {
       paint: { 'text-color': '#D29922', 'text-halo-color': '#0E1116', 'text-halo-width': 1.2 },
     });
     this.sinir(this.veri.sinir);
-    this.rota(this.veri.rota);
+    this.rotalar(this.veri.rotalar);
     this.yakin(this.veri.yakin);
+    this.yerler(this.veri.yerler);
+    this.izokron(this.veri.izokron);
   }
 
   katmanDegistir(k) {
@@ -282,7 +303,16 @@ class MapLibreMotoru {
   }
 
   sinir(geometri) { this.veri.sinir = geometri; this.veriYaz('sinir', ozellik(geometri)); }
-  rota(geometri) { this.veri.rota = geometri; this.veriYaz('rota', ozellik(geometri)); }
+  rotalar(liste) {
+    this.veri.rotalar = liste;
+    this.veriYaz('rotalar', {
+      type: 'FeatureCollection',
+      features: liste.filter((r) => r.geometri).map((r) => ({ type: 'Feature', geometry: r.geometri, properties: { renk: r.renk } })),
+    });
+  }
+
+  yerler(fc) { this.veri.yerler = fc; this.veriYaz('yerler', fc || BOS_KOLEKSIYON); }
+  izokron(fc) { this.veri.izokron = fc; this.veriYaz('izokron', fc || BOS_KOLEKSIYON); }
 
   yakin(liste) {
     this.veri.yakin = liste;
@@ -296,6 +326,7 @@ class MapLibreMotoru {
 
   sigdir(kutu) { this.h.fitBounds([[kutu[0], kutu[1]], [kutu[2], kutu[3]]], { padding: 40, maxZoom: 15 }); }
   uc(lat, lon, zoom) { this.h.flyTo({ center: [lon, lat], zoom }); }
+  kutu() { const b = this.h.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]; }
 
   goruntu() {
     const c = this.h.getCenter();
@@ -314,7 +345,9 @@ class LeafletMotoru {
     // MapLibre zoom'u 512 px karoya gore; Leaflet 256 px karoya gore bir fazladir
     this.h = L.map(kap, { center: [goruntu.lat, goruntu.lon], zoom: goruntu.zoom + 1, zoomSnap: 0.25, worldCopyJump: false });
     this.sinirKatman = L.layerGroup().addTo(this.h);
+    this.izokronKatman = L.layerGroup().addTo(this.h);
     this.rotaKatman = L.layerGroup().addTo(this.h);
+    this.yerKatman = L.layerGroup().addTo(this.h);
     this.yakinKatman = L.layerGroup().addTo(this.h);
     this.isaretKatman = L.layerGroup().addTo(this.h);
     this.katmanDegistir(katman);
@@ -324,8 +357,10 @@ class LeafletMotoru {
     this.pin(veri.pin);
     this.duraklar(veri.duraklar);
     this.sinir(veri.sinir);
-    this.rota(veri.rota);
+    this.rotalar(veri.rotalar);
     this.yakin(veri.yakin);
+    this.yerler(veri.yerler);
+    this.izokron(veri.izokron);
   }
 
   katmanDegistir(k) {
@@ -375,12 +410,27 @@ class LeafletMotoru {
     }
   }
 
-  rota(geometri) {
-    this.veri.rota = geometri;
+  rotalar(liste) {
+    this.veri.rotalar = liste;
     this.rotaKatman.clearLayers();
-    if (geometri) {
-      window.L.geoJSON({ type: 'Feature', geometry: geometri, properties: {} },
-        { style: { color: '#3FB950', weight: 5 }, interactive: false }).addTo(this.rotaKatman);
+    liste.filter((r) => r.geometri).forEach((r) => window.L.geoJSON({ type: 'Feature', geometry: r.geometri, properties: {} },
+      { style: { color: r.renk, weight: 5 }, interactive: false }).addTo(this.rotaKatman));
+  }
+
+  yerler(fc) {
+    this.veri.yerler = fc;
+    this.yerKatman.clearLayers();
+    (fc ? fc.features : []).forEach((f) => window.L.circleMarker([f.geometry.coordinates[1], f.geometry.coordinates[0]], {
+      radius: 4, color: '#0E1116', weight: 1, fillColor: f.properties.renk, fillOpacity: 1,
+    }).bindTooltip(f.properties.ad).addTo(this.yerKatman));
+  }
+
+  izokron(fc) {
+    this.veri.izokron = fc;
+    this.izokronKatman.clearLayers();
+    if (fc) {
+      window.L.geoJSON(fc, { style: (f) => ({ color: f.properties.renk, weight: 2, fillColor: f.properties.renk, fillOpacity: 0.16 }),
+        interactive: false }).addTo(this.izokronKatman);
     }
   }
 
@@ -394,6 +444,7 @@ class LeafletMotoru {
 
   sigdir(kutu) { this.h.fitBounds([[kutu[1], kutu[0]], [kutu[3], kutu[2]]], { padding: [40, 40], maxZoom: 16 }); }
   uc(lat, lon, zoom) { this.h.flyTo([lat, lon], zoom + 1); }
+  kutu() { const b = this.h.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]; }
 
   goruntu() {
     const c = this.h.getCenter();
@@ -421,7 +472,7 @@ function motorKur() {
   const cb = {
     tikla: haritaTikla,
     imlec: (ll) => { $('okuma-imlec').textContent = `${sayi(ll.lat, 5)} ${sayi(ll.lng, 5)}`; },
-    goruntu: (g) => { $('okuma-zoom').textContent = sayi(g.zoom, 1); },
+    goruntu: (g) => { $('okuma-zoom').textContent = sayi(g.zoom, 1); if ($('yer-katmani').checked) yerKatmaniGecikmeli(); },
   };
   motor = new Sinif(kap, aktifKatman(), durum.goruntu, durum.veri, cb);
   $('mt-logo').hidden = aktifKatman().tur === 'vektor';
@@ -508,26 +559,33 @@ async function ara() {
   mesaj('ara-mesaj', 'Aranıyor...');
   try {
     const g = motor.goruntu();
-    const veri = await api(`/v1/arama?q=${encodeURIComponent(metin)}&limit=10&lat=${g.lat}&lon=${g.lon}`);
-    const sonuclar = veri.features || [];
-    mesaj('ara-mesaj', sonuclar.length ? `${sayi(sonuclar.length)} sonuç` : 'Sonuç bulunamadı.');
-    for (const f of sonuclar) {
-      const p = f.properties || {};
-      const [lon, lat] = f.geometry.coordinates;
-      const dugme = el('button', { type: 'button' },
-        el('div', { sinif: 'ad', metin: p.name || [p.street, p.housenumber].filter(Boolean).join(' ') || 'İsimsiz' }),
-        el('div', { sinif: 'alt', metin: `${p.osm_value || p.osm_key || ''} · ${adresMetni({ ...p, name: '' })}` }));
-      dugme.addEventListener('click', () => {
-        motor.pin({ lat, lng: lon });
-        motor.uc(lat, lon, 16);
-        const ham = $('ara-ham');
-        ham.hidden = false;
-        ham.textContent = `${sayi(lat, 6)} ; ${sayi(lon, 6)}\n${JSON.stringify(p, null, 2)}`;
-      });
+    const veri = await api(`/v1/adres/ara?q=${encodeURIComponent(metin)}&limit=15&lat=${g.lat}&lon=${g.lon}`);
+    mesaj('ara-mesaj', veri.length ? `${sayi(veri.length)} sonuç` : 'Sonuç bulunamadı.');
+    for (const r of veri) {
+      const dugme = el('button', { type: 'button' }, el('div', { sinif: 'ad', metin: r.ad }),
+        el('div', { sinif: 'alt', metin: `${TUR_ETIKET[r.tur] || r.tur} · ${r.adres}${r.mesafe_m !== null ? ` · ${mesafeYaz(r.mesafe_m)}` : ''}` }));
+      dugme.addEventListener('click', () => adresSec(r));
       liste.append(el('li', {}, dugme));
     }
   } catch (hata) {
     mesaj('ara-mesaj', hata instanceof HataMesaji ? hata.message : 'Arama yapılamadı.', 'hata');
+  }
+}
+
+async function adresSec(r) {
+  motor.pin({ lat: r.merkez.lat, lng: r.merkez.lon });
+  motor.uc(r.merkez.lat, r.merkez.lon, r.tur === 'kapi' ? 18 : r.tur === 'sokak' ? 16 : 15);
+  const ham = $('ara-ham');
+  ham.hidden = false;
+  ham.textContent = `${sayi(r.merkez.lat, 6)} ; ${sayi(r.merkez.lon, 6)}\n${JSON.stringify(r, null, 2)}`;
+  motor.sinir(null);
+  if (r.tur === 'sokak') {
+    try {
+      const detay = await api(`/v1/adres/sokak/${r.id}?cizgi=true`);
+      motor.sinir(detay.cizgi);
+    } catch (hata) {
+      console.warn('Sokak çizgisi alınamadı', hata);
+    }
   }
 }
 
@@ -547,33 +605,27 @@ async function pinKoy(ll) {
   sonuc.replaceChildren();
   mesaj('pin-mesaj', 'Sorgulanıyor...');
   const q = `lat=${ll.lat}&lon=${ll.lng}`;
-  const [nokta, adres, yakin] = await Promise.allSettled([
-    api(`/v1/yerlesim/nokta?${q}`), api(`/v1/ters-arama?${q}&limit=1`), api(`/v1/yerlesim/yakin?${q}&yaricap_m=5000&limit=15`),
-  ]);
+  const [adres, yakin] = await Promise.allSettled([api(`/v1/adres/nokta?${q}&yaricap_m=150&limit=6`), api(`/v1/yerlesim/yakin?${q}&yaricap_m=5000&limit=15`)]);
   mesaj('pin-mesaj', '');
   sonuc.append(kart('Konum', satirMetin(`${sayi(ll.lat, 6)} ; ${sayi(ll.lng, 6)}`, 'sayi')));
-
   const hataKart = (baslik, neden) => kart(baslik, satirMetin(neden.reason instanceof HataMesaji ? neden.reason.message : 'Alınamadı.', 'soluk'));
-
-  if (nokta.status === 'fulfilled') {
-    const v = nokta.value;
-    sonuc.append(kart('İdari yapı',
-      satirMetin(v.icinde.length ? v.icinde.map((s) => s.ad).join(' › ') : 'Türkiye sınırları dışında veya veri yok', 'zincir'),
-      ...v.icinde.map((s) => satirMetin(`${TUR_ETIKET[s.tur] || s.tur}: ${s.ad}${s.nufus ? ` · nüfus ${sayi(s.nufus)}` : ''}`, 'soluk')),
-      v.en_yakin_merkez ? satirMetin(`En yakın merkez: ${TUR_ETIKET[v.en_yakin_merkez.tur] || ''} ${v.en_yakin_merkez.ad} (${mesafeYaz(v.en_yakin_merkez.mesafe_m)})`) : satirMetin('')));
-  } else sonuc.append(hataKart('İdari yapı', nokta));
-
+  const listeKart = (baslik, ogeler, alt) => {
+    const liste = el('ul', { sinif: 'liste' });
+    ogeler.forEach((o) => liste.append(el('li', {}, el('div', { sinif: 'ad', metin: o.ad }), el('div', { sinif: 'alt', metin: alt(o) }))));
+    return kart(baslik, liste);
+  };
   if (adres.status === 'fulfilled') {
-    const f = (adres.value.features || [])[0];
-    sonuc.append(kart('En yakın adres', satirMetin(f ? adresMetni(f.properties || {}) || 'Adres bilgisi yok' : 'Yakında adres bulunamadı')));
-  } else sonuc.append(hataKart('En yakın adres', adres));
-
+    const v = adres.value;
+    sonuc.append(kart('Adres', satirMetin(v.adres || 'Adres bilgisi yok', 'zincir'),
+      satirMetin([v.il, v.ilce, v.mahalle].filter(Boolean).join(' › '), 'soluk'),
+      v.idari.en_yakin_merkez ? satirMetin(`En yakın merkez: ${TUR_ETIKET[v.idari.en_yakin_merkez.tur] || ''} ${v.idari.en_yakin_merkez.ad} (${mesafeYaz(v.idari.en_yakin_merkez.mesafe_m)})`) : satirMetin('')));
+    if (v.kapilar.length) sonuc.append(listeKart('Kapı numaraları', v.kapilar, (o) => `${mesafeYaz(o.mesafe_m)}`));
+    if (v.sokaklar.length) sonuc.append(listeKart('En yakın sokaklar', v.sokaklar, (o) => `${o.ek.sinif} · ${mesafeYaz(o.mesafe_m)}`));
+    if (v.yerler.length) sonuc.append(listeKart('Yakındaki yerler', v.yerler, (o) => `${o.ek.yer_turu} · ${mesafeYaz(o.mesafe_m)}`));
+  } else sonuc.append(hataKart('Adres', adres));
   if (yakin.status === 'fulfilled') {
     motor.yakin(yakin.value);
-    const liste = el('ul', { sinif: 'liste' });
-    yakin.value.forEach((y) => liste.append(el('li', {}, el('div', { sinif: 'ad', metin: y.ad }),
-      el('div', { sinif: 'alt', metin: `${TUR_ETIKET[y.tur] || y.tur} · ${mesafeYaz(y.mesafe_m)}` }))));
-    sonuc.append(kart('Yakın merkezler (5 km)', liste));
+    sonuc.append(listeKart('Yakın merkezler (5 km)', yakin.value, (o) => `${TUR_ETIKET[o.tur] || o.tur} · ${mesafeYaz(o.mesafe_m)}`));
   } else {
     motor.yakin([]);
     sonuc.append(hataKart('Yakın merkezler', yakin));
@@ -653,28 +705,128 @@ function noktalar() {
   return durum.veri.duraklar.map((d) => ({ lat: d.lat, lon: d.lng }));
 }
 
-async function rotaCiz() {
+function rotaEkle(rota) {
+  durum.rotaSayac = (durum.rotaSayac || 0) + 1;
+  durum.veri.rotalar = [...durum.veri.rotalar, { ...rota, renk: ROTA_RENKLERI[(durum.rotaSayac - 1) % ROTA_RENKLERI.length], no: durum.rotaSayac }];
+  motor.rotalar(durum.veri.rotalar);
+  rotaListesiYaz();
+}
+
+function rotaListesiYaz() {
   const sonuc = $('rota-sonuc');
   sonuc.replaceChildren();
+  durum.veri.rotalar.forEach((r) => {
+    const sil = el('button', { type: 'button', sinif: 'dugme ikincil', metin: 'Sil' });
+    sil.addEventListener('click', () => {
+      durum.veri.rotalar = durum.veri.rotalar.filter((x) => x.no !== r.no);
+      motor.rotalar(durum.veri.rotalar);
+      rotaListesiYaz();
+    });
+    const rozet = el('span', { sinif: 'renk-nokta' });
+    rozet.style.setProperty('--renk', r.renk);
+    sonuc.append(el('div', { sinif: 'kart' }, el('h3', {}, rozet, ` Rota ${r.no} · ${r.baslik}`),
+      satirMetin(`Mesafe: ${mesafeYaz(r.mesafe_m)}`, 'sayi'), satirMetin(`Süre: ${sureYaz(r.sure_sn)}`, 'sayi'),
+      r.not ? satirMetin(r.not, 'soluk') : satirMetin(''), sil));
+  });
+}
+
+async function rotaCiz() {
   if (durum.veri.duraklar.length < 2) { mesaj('rota-mesaj', 'En az 2 durak gerekli.', 'uyari'); return; }
   mesaj('rota-mesaj', 'Hesaplanıyor...');
   try {
     const profil = $('rota-profil').value;
     const v = await api('/v1/rota', { method: 'POST', body: JSON.stringify({ noktalar: noktalar(), profil, geometri: true }) });
     mesaj('rota-mesaj', '');
-    motor.rota(v.geometri);
+    rotaEkle({ geometri: v.geometri, mesafe_m: v.mesafe_m, sure_sn: v.sure_sn, baslik: $('rota-profil').selectedOptions[0].textContent });
     if (v.geometri) motor.sigdir(geometriKutusu(v.geometri));
-    const p = noktalar();
-    sonuc.append(kart('Rota', satirMetin(`Mesafe: ${mesafeYaz(v.mesafe_m)}`, 'sayi'), satirMetin(`Süre: ${sureYaz(v.sure_sn)}`, 'sayi'),
-      satirMetin(`Çizgi noktası: ${sayi(v.geometri ? v.geometri.coordinates.length : 0)}`, 'sayi')));
-    sonuc.append(kart('OSRM uyumlu adres', satirMetin(`/osrm/route/v1/${profil === 'auto' ? 'driving' : profil}/${p.map((n) => `${n.lon.toFixed(5)},${n.lat.toFixed(5)}`).join(';')}`, 'sayi')));
   } catch (hata) {
     mesaj('rota-mesaj', hata instanceof HataMesaji ? hata.message : 'Rota hesaplanamadı.', 'hata');
   }
 }
 
+/** Kodlanmis polyline'i [boylam, enlem] listesine cevirir (Valhalla: hassasiyet 6). */
+function polylineCoz(metin, hassasiyet = 6) {
+  const carpan = 10 ** hassasiyet;
+  let indeks = 0; let enlem = 0; let boylam = 0;
+  const sonuc = [];
+  while (indeks < metin.length) {
+    for (const hedef of ['enlem', 'boylam']) {
+      let kaydirma = 0; let deger = 0; let bayt;
+      do {
+        bayt = metin.charCodeAt(indeks++) - 63;
+        deger |= (bayt & 0x1f) << kaydirma;
+        kaydirma += 5;
+      } while (bayt >= 0x20);
+      const fark = deger & 1 ? ~(deger >> 1) : deger >> 1;
+      if (hedef === 'enlem') enlem += fark; else boylam += fark;
+    }
+    sonuc.push([boylam / carpan, enlem / carpan]);
+  }
+  return sonuc;
+}
+
+const COSTING = { auto: 'auto', motosiklet: 'motorcycle', bisiklet: 'bicycle', yaya: 'pedestrian' };
+
+/** Duraklari en kisa sureyle gezen sirayi bulur (Valhalla optimized_route). */
+async function optimizeRota() {
+  if (durum.veri.duraklar.length < 3) { mesaj('rota-mesaj', 'Optimizasyon için en az 3 durak gerekli.', 'uyari'); return; }
+  mesaj('rota-mesaj', 'Optimize ediliyor...');
+  try {
+    const v = await api('/valhalla/optimized_route', { method: 'POST', body: JSON.stringify({
+      locations: noktalar(), costing: COSTING[$('rota-profil').value], directions_options: { units: 'kilometers' } }) });
+    const koordinatlar = v.trip.legs.flatMap((b) => polylineCoz(b.shape, 6));
+    const sira = (v.trip.locations || []).map((k) => harf(k.original_index)).join(' → ');
+    mesaj('rota-mesaj', '');
+    rotaEkle({ geometri: { type: 'LineString', coordinates: koordinatlar }, mesafe_m: v.trip.summary.length * 1000, sure_sn: v.trip.summary.time,
+      baslik: 'Optimize', not: `Sıra: ${sira}` });
+    motor.sigdir(geometriKutusu({ coordinates: koordinatlar }));
+  } catch (hata) {
+    mesaj('rota-mesaj', hata instanceof HataMesaji ? hata.message : 'Optimize edilemedi.', 'hata');
+  }
+}
+
+/** Ilk duraktan (yoksa pinden) verilen dakikalarda ulasilabilen alanlari cizer (Valhalla isochrone). */
+async function izokronHesapla() {
+  const kaynak = durum.veri.duraklar[0] || durum.veri.pin;
+  if (!kaynak) { mesaj('rota-mesaj', 'Önce bir durak ekleyin veya pin koyun.', 'uyari'); return; }
+  const dakikalar = $('izokron-sure').value.split(',').map((x) => Number(x.trim())).filter((x) => x > 0 && x <= 60).sort((a, b) => a - b).slice(0, 5);
+  if (!dakikalar.length) { mesaj('rota-mesaj', 'Dakikaları 5,10,15 gibi yazın.', 'uyari'); return; }
+  mesaj('rota-mesaj', 'Hesaplanıyor...');
+  try {
+    const v = await api('/valhalla/isochrone', { method: 'POST', body: JSON.stringify({
+      locations: [{ lat: kaynak.lat, lon: kaynak.lng }], costing: COSTING[$('rota-profil').value],
+      contours: dakikalar.map((time) => ({ time })), polygons: true, denoise: 0.5, generalize: 50 }) });
+    mesaj('rota-mesaj', `${dakikalar.join(', ')} dakikalık erişim alanı çizildi.`, 'basari');
+    v.features.forEach((f) => {
+      const sira = dakikalar.indexOf(f.properties.contour);
+      f.properties.renk = IZOKRON_RENKLERI[Math.max(sira, 0) % IZOKRON_RENKLERI.length];
+    });
+    motor.izokron(v);
+    const buyuk = v.features[v.features.length - 1];
+    if (buyuk) motor.sigdir(geometriKutusu(buyuk.geometry));
+  } catch (hata) {
+    mesaj('rota-mesaj', hata instanceof HataMesaji ? hata.message : 'Erişim alanı hesaplanamadı.', 'hata');
+  }
+}
+
+/** Gorunen harita kutusundaki yer isaretlerini cizer (yakinlastirma >= 14). */
+async function yerKatmaniYukle() {
+  if (!$('yer-katmani').checked) { motor.yerler(null); return; }
+  if (motor.goruntu().zoom < 14) { motor.yerler(null); mesaj('baglanti-mesaj', 'Yerleri görmek için haritayı yakınlaştırın (z14+).', 'uyari'); return; }
+  try {
+    const [b, g, d, k] = motor.kutu();
+    const fc = await api(`/v1/adres/yerler?bati=${b}&guney=${g}&dogu=${d}&kuzey=${k}&limit=1500`);
+    fc.features.forEach((f) => { f.properties.renk = YER_RENKLERI[f.properties.tur] || '#8B949E'; });
+    motor.yerler(fc);
+    mesaj('baglanti-mesaj', `${sayi(fc.features.length)} yer gösteriliyor.`);
+  } catch (hata) {
+    mesaj('baglanti-mesaj', hata instanceof HataMesaji ? hata.message : 'Yerler alınamadı.', 'hata');
+  }
+}
+const yerKatmaniGecikmeli = gecikmeli(yerKatmaniYukle, 700);
+
 async function matrisHesapla() {
-  const sonuc = $('rota-sonuc');
+  const sonuc = $('matris-sonuc');
   sonuc.replaceChildren();
   if (durum.veri.duraklar.length < 2) { mesaj('rota-mesaj', 'En az 2 durak gerekli.', 'uyari'); return; }
   mesaj('rota-mesaj', 'Hesaplanıyor...');
@@ -696,9 +848,12 @@ async function matrisHesapla() {
 
 function rotaTemizle() {
   durum.veri.duraklar = [];
-  motor.rota(null);
+  durum.veri.rotalar = [];
+  motor.rotalar([]);
+  motor.izokron(null);
   durakYenile();
-  $('rota-sonuc').replaceChildren();
+  rotaListesiYaz();
+  $('matris-sonuc').replaceChildren();
   mesaj('rota-mesaj', '');
 }
 
@@ -779,6 +934,9 @@ async function baslat() {
   $('rota-ciz').addEventListener('click', rotaCiz);
   $('matris-hesapla').addEventListener('click', matrisHesapla);
   $('rota-temizle').addEventListener('click', rotaTemizle);
+  $('rota-optimize').addEventListener('click', optimizeRota);
+  $('izokron-hesapla').addEventListener('click', izokronHesapla);
+  $('yer-katmani').addEventListener('change', yerKatmaniYukle);
   document.addEventListener('keydown', (e) => {
     const yazan = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
     if (e.key === '/' && !yazan) {
