@@ -725,12 +725,24 @@ function hashOku() {
   return sonuc;
 }
 
-function baslat() {
+/** Sunucunun (Coolify ortam degiskenleri) verdigi yapilandirma; yoksa bos doner. */
+async function sunucuYapilandirmasi() {
+  try {
+    const yanit = await fetch('yapilandirma.json', { cache: 'no-store' });
+    return yanit.ok ? await yanit.json() : {};
+  } catch (hata) {
+    console.warn('Sunucu yapılandırması okunamadı', hata);
+    return {};
+  }
+}
+
+async function baslat() {
   const kayit = depoOku();
   const hash = hashOku();
+  const sunucu = await sunucuYapilandirmasi();
   durum.api = kayit.api || VARSAYILAN_API;
   durum.anahtar = hash.anahtar || kayit.anahtar || '';
-  durum.mtAnahtar = hash.mtAnahtar || kayit.mtAnahtar || '';
+  durum.mtAnahtar = hash.mtAnahtar || kayit.mtAnahtar || sunucu.mtAnahtar || '';
   durum.katmanKod = kayit.katmanKod || 'v-dark';
   durum.motorAd = kayit.motorAd || 'maplibre';
   durum.yap = varsayilanYapilandirma();
