@@ -4,15 +4,16 @@
 
 services:
   db:
-    mem_limit: 512m
-    image: postgres:17-alpine
+    mem_limit: 1g
+    # PostGIS: anahtar kayitlari + yerlesim (il / ilce / mahalle-koy) verisi
+    image: postgis/postgis:17-3.5
     restart: unless-stopped
     environment:
       POSTGRES_DB: harita
       POSTGRES_USER: harita
       POSTGRES_PASSWORD: ${DB_SIFRE:?DB_SIFRE gerekli}
     volumes:
-      - harita_db:/var/lib/postgresql/data
+      - harita_pg:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U harita -d harita"]
       interval: 10s
@@ -82,6 +83,23 @@ services:
     expose:
       - "2322"
 
+  # Yerlesim yukleyicisi: Turkiye il / ilce / mahalle-koy sinirlari ve sehir-kasaba-koy-mezra-semt merkezlerini OSM'den yukler,
+  # aylik tazeler. Semayi gateway kurar; yukleyici hazir olana kadar bekler.
+  veri:
+    mem_limit: 2g
+    cpus: 1.0
+    build: ./services/veri
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://harita:${DB_SIFRE:?DB_SIFRE gerekli}@db:5432/harita
+      VERI_ADRESI: ${OSM_VERI_ADRESI:-https://download.geofabrik.de/europe/turkey-latest.osm.pbf}
+      GUNCELLEME_GUN: ${GUNCELLEME_GUN:-30}
+    volumes:
+      - harita_veri:/veri
+
   # Anahtar kapisi: proje anahtari, izin, kota, kullanim sayaci; OSRM uyumlu rota ucu dahil.
   gateway:
     mem_limit: 512m
@@ -105,7 +123,8 @@ services:
       - "8000"
 
 volumes:
-  harita_db:
+  harita_pg:
+  harita_veri:
   harita_karo:
   harita_rota:
   harita_arama:

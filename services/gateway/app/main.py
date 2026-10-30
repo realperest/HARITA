@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app import cache, db
 from app.config import ayarlar
-from app.routers import arama, osrm, rota, saglik, yapilandirma, yonetim
+from app.routers import arama, osrm, rota, saglik, yapilandirma, yerlesim, yonetim
 from app.services import http
 
 logging.basicConfig(level=ayarlar.LOG_SEVIYESI, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -44,5 +44,6 @@ async def beklenmeyen_hata(request: Request, hata: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": "Beklenmeyen bir hata olustu."})
 
 
-for yonlendirici in (saglik.router, rota.router, osrm.router, arama.router, yapilandirma.router, yonetim.router):
+for yonlendirici in (saglik.router, rota.router, osrm.router, arama.router, yapilandirma.router, yerlesim.router,
+                   yonetim.router):
     app.include_router(yonlendirici)

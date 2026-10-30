@@ -8,6 +8,8 @@ import respx
 
 from app.services.valhalla import polyline_coz
 
+pytestmark = pytest.mark.asyncio(loop_scope="session")
+
 YONETIM = {"X-Yonetim-Anahtari": "test-yonetim"}
 
 VALHALLA_OSRM_YANITI = {

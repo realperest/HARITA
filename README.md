@@ -13,7 +13,8 @@ Kapsam: tum Turkiye. Veri: OpenStreetMap (c) OpenStreetMap katkicilari (ODbL).
 | `rota` | Valhalla | Rota, sure/mesafe matrisi (auto, motosiklet, bisiklet, yaya) | Hayir (ic ag) |
 | `arama` | Photon | Adres / yer arama, ters arama | Hayir (ic ag) |
 | `gateway` | FastAPI | Proje anahtari, izin, kaynak kisiti, kota, kullanim sayaci, OSRM uyumlu rota | Evet (alan adi) |
-| `db`, `redis` | PostgreSQL 17, Redis 7 | Gateway'in proje / anahtar kayitlari ve kota sayaclari | Hayir |
+| `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlari ve sehir-kasaba-koy-mezra-semt merkezlerini OSM'den yukler, aylik tazeler | Hayir |
+| `db`, `redis` | PostGIS 17, Redis 7 | Proje / anahtar kayitlari, kota sayaclari ve yerlesim verisi | Hayir |
 
 Neden bu secimler: karolar tek dosyadir (PMTiles), sunucu CPU'su yemez, Cloudflare onbellegine uygundur ve MapTiler gibi
 ucretli/kotali dis servise ihtiyac birakmaz. Valhalla bellege eslemeli cizge kullandigi icin tum Turkiye'yi OSRM'den dusuk
@@ -42,6 +43,10 @@ curl -X POST https://HARITA-API/yonetim/projeler -H "X-Yonetim-Anahtari: ..." -H
 | `GET /v1/arama`, `GET /v1/ters-arama` | Adres / yer arama |
 | `GET /osrm/route/v1/{profil}/{koordinatlar}` | OSRM uyumlu rota (mevcut OSRM kullanan kodu degistirmeden baglar) |
 | `GET /k/{anahtar}/osrm/route/v1/...` | Ayni uc, anahtar yolda (baslik ayarlanamayan istemciler icin) |
+| `GET /v1/yerlesim/ara` | Il, ilce, mahalle-koy, sehir, kasaba, koy, mezra, semt arama (Turkce karakter duyarsiz) |
+| `GET /v1/yerlesim/nokta` | Noktanin il / ilce / mahalle-koy bilgisi ve en yakin merkez |
+| `GET /v1/yerlesim/yakin` | Yaricap icindeki merkezler |
+| `GET /v1/yerlesim/{id}`, `/{id}/alt` | Ayrinti (zincir, GeoJSON sinir) ve alt ogeler (ilin ilceleri vb.) |
 | `/yonetim/*` | Proje ve anahtar yonetimi |
 | `GET /saglik`, `GET /saglik/hazir` | Canlilik / hazirlik |
 

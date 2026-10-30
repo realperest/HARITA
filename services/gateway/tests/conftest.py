@@ -15,7 +15,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from app.main import app  # noqa: E402
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def istemci():
     """Uygulamayi yasam dongusuyle birlikte calistiran test istemcisi."""
     async with app.router.lifespan_context(app):
