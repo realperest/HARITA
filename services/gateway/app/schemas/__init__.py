@@ -1,0 +1,1 @@
+"""Pydantic sema paketi."""

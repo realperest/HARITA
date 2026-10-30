@@ -1,0 +1,51 @@
+# Karo servisi nginx ayari (entrypoint.sh envsubst ile IZINLI_KOKEN_REGEX'i doldurur).
+worker_processes auto;
+events { worker_connections 1024; }
+
+http {
+    include /etc/nginx/mime.types;
+    sendfile on;
+    gzip on;
+    gzip_types application/json application/x-protobuf application/octet-stream;
+    gzip_min_length 1024;
+
+    # Origin izinli kaynak desenine uyuyorsa aynen yansitilir, uymuyorsa CORS basligi eklenmez
+    map $http_origin $cors_izin {
+        default "";
+        "~^(${IZINLI_KOKEN_REGEX})$" $http_origin;
+    }
+
+    server {
+        listen 8080;
+
+        add_header Access-Control-Allow-Origin $cors_izin always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Range, If-Match, If-None-Match" always;
+        add_header Access-Control-Expose-Headers "Content-Length, Content-Range, ETag" always;
+        add_header Vary Origin always;
+
+        location = /saglik {
+            default_type text/plain;
+            return 200 "ok";
+        }
+
+        # Karolar: Cloudflare / tarayici onbellegi icin uzun omur (veri ayda bir yenilenir)
+        location /tiles/ {
+            if ($request_method = OPTIONS) { return 204; }
+            proxy_pass http://127.0.0.1:8081/;
+            proxy_set_header Host $host;
+            proxy_hide_header Access-Control-Allow-Origin;
+            add_header Cache-Control "public, max-age=86400" always;
+            add_header Access-Control-Allow-Origin $cors_izin always;
+            add_header Vary Origin always;
+        }
+
+        location /assets/ {
+            if ($request_method = OPTIONS) { return 204; }
+            alias /usr/share/harita/assets/;
+            add_header Cache-Control "public, max-age=604800, immutable" always;
+            add_header Access-Control-Allow-Origin $cors_izin always;
+            add_header Vary Origin always;
+        }
+    }
+}

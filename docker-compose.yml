@@ -1,0 +1,98 @@
+# HARITA: tum projelerin ortak harita servisi (karo + rota + adres arama + anahtar kapisi).
+# Coolify'da "Docker Compose" kaynagi olarak yayinlanir. Gizli degerler Coolify ortam degiskenlerinden gelir.
+# Alan adlari: tiles -> karo alan adi, gateway -> API alan adi (Coolify panelinde atanir). Diger servisler yalniz ic aginda.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: harita
+      POSTGRES_USER: harita
+      POSTGRES_PASSWORD: ${DB_SIFRE:?DB_SIFRE gerekli}
+    volumes:
+      - harita_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U harita -d harita"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Vektor karolar (PMTiles) + yazi tipleri + simgeler. Ilk acilista Protomaps gunluk yapisindan Turkiye kesitini indirir.
+  tiles:
+    build: ./services/tiles
+    restart: unless-stopped
+    environment:
+      KAPSAM_KUTUSU: ${KAPSAM_KUTUSU:-25.6,35.8,44.9,42.2}
+      MAKS_YAKINLASTIRMA: ${MAKS_YAKINLASTIRMA:-15}
+      IZINLI_KOKEN_REGEX: ${IZINLI_KOKEN_REGEX:-.*}
+    volumes:
+      - harita_karo:/veri
+    expose:
+      - "8080"
+
+  # Rota, matris, izokron (Valhalla). Ilk acilista Geofabrik Turkiye verisinden cizge uretir (saatler surmez, ~20-60 dk).
+  rota:
+    image: ghcr.io/valhalla/valhalla-scripted:3.9.1
+    restart: unless-stopped
+    environment:
+      tile_urls: ${OSM_VERI_ADRESI:-https://download.geofabrik.de/europe/turkey-latest.osm.pbf}
+      server_threads: ${ROTA_IS_PARCACIGI:-2}
+      use_tiles_ignore_pbf: "True"
+      build_admins: "True"
+      build_time_zones: "True"
+      build_elevation: "False"
+      serve_tiles: "True"
+    volumes:
+      - harita_rota:/custom_files
+    expose:
+      - "8002"
+
+  # Adres / yer arama ve ters arama (Photon). Dizin ilk acilista gezegen dokumunden TR icin uretilir (uzun surer).
+  arama:
+    build: ./services/photon
+    restart: unless-stopped
+    environment:
+      ULKE_KODLARI: ${ULKE_KODLARI:-TR}
+      DIL_KODLARI: ${DIL_KODLARI:-tr,en}
+      PHOTON_BELLEK: ${PHOTON_BELLEK:-2g}
+    volumes:
+      - harita_arama:/veri
+    expose:
+      - "2322"
+
+  # Anahtar kapisi: proje anahtari, izin, kota, kullanim sayaci; OSRM uyumlu rota ucu dahil.
+  gateway:
+    build: ./services/gateway
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://harita:${DB_SIFRE:?DB_SIFRE gerekli}@db:5432/harita
+      REDIS_URL: redis://redis:6379/0
+      YONETIM_ANAHTARI: ${YONETIM_ANAHTARI:?YONETIM_ANAHTARI gerekli}
+      ROTA_ADRESI: http://rota:8002
+      ARAMA_ADRESI: http://arama:2322
+      KARO_ADRESI: ${KARO_GENEL_ADRESI:?KARO_GENEL_ADRESI gerekli}
+      LOG_SEVIYESI: ${LOG_SEVIYESI:-INFO}
+    expose:
+      - "8000"
+
+volumes:
+  harita_db:
+  harita_karo:
+  harita_rota:
+  harita_arama:

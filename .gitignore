@@ -1,0 +1,6 @@
+KONUSMALAR/
+__pycache__/
+.pytest_cache/
+.env
+*.pmtiles
+*.osm.pbf
