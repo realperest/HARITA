@@ -4,6 +4,7 @@
 
 services:
   db:
+    mem_limit: 512m
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -19,6 +20,7 @@ services:
       retries: 10
 
   redis:
+    mem_limit: 256m
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
@@ -30,6 +32,8 @@ services:
 
   # Vektor karolar (PMTiles) + yazi tipleri + simgeler. Ilk acilista Protomaps gunluk yapisindan Turkiye kesitini indirir.
   tiles:
+    mem_limit: 1g
+    cpus: 1.0
     build: ./services/tiles
     restart: unless-stopped
     environment:
@@ -43,6 +47,9 @@ services:
 
   # Rota, matris, izokron (Valhalla). Ilk acilista Geofabrik Turkiye verisinden cizge uretir (saatler surmez, ~20-60 dk).
   rota:
+    # Ortak sunucuyu korumak icin sinirli; asarsa yalniz bu konteyner durur (diger projeler etkilenmez)
+    mem_limit: 6g
+    cpus: 2.0
     image: ghcr.io/valhalla/valhalla-scripted:3.9.1
     restart: unless-stopped
     environment:
@@ -60,12 +67,16 @@ services:
 
   # Adres / yer arama ve ters arama (Photon). Dizin ilk acilista gezegen dokumunden TR icin uretilir (uzun surer).
   arama:
+    mem_limit: 3500m
+    cpus: 1.5
     build: ./services/photon
     restart: unless-stopped
     environment:
       ULKE_KODLARI: ${ULKE_KODLARI:-TR}
       DIL_KODLARI: ${DIL_KODLARI:-tr,en}
       PHOTON_BELLEK: ${PHOTON_BELLEK:-2g}
+      # Rota cizgesi hazir olana kadar indeks uretimi beklenir (iki agir isi ayni anda calistirmamak icin)
+      ROTA_BEKLE_ADRESI: http://rota:8002/status
     volumes:
       - harita_arama:/veri
     expose:
@@ -73,6 +84,8 @@ services:
 
   # Anahtar kapisi: proje anahtari, izin, kota, kullanim sayaci; OSRM uyumlu rota ucu dahil.
   gateway:
+    mem_limit: 512m
+    cpus: 1.0
     build: ./services/gateway
     restart: unless-stopped
     depends_on:

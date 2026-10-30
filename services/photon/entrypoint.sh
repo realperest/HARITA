@@ -9,6 +9,14 @@ PHOTON_BELLEK="${PHOTON_BELLEK:-2g}"
 DOKUM_ADRESI="${DOKUM_ADRESI:-https://download1.graphhopper.com/public/photon-dump-planet-1.0-latest.jsonl.zst}"
 
 if [ ! -f /veri/.hazir ]; then
+    # Ortak sunucuda bellek tepesini ayirmak icin: rota servisi hazir olana kadar bekle (en fazla ~6 saat)
+    if [ -n "${ROTA_BEKLE_ADRESI:-}" ]; then
+        echo "[arama] Rota servisinin hazir olmasi bekleniyor..."
+        for _ in $(seq 1 720); do
+            curl -fs --max-time 5 "$ROTA_BEKLE_ADRESI" > /dev/null && break
+            sleep 30
+        done
+    fi
     echo "[arama] Dizin yok, uretiliyor: ulke=$ULKE_KODLARI dil=$DIL_KODLARI (saatler surebilir, bir kereye mahsus)..."
     rm -rf /veri/photon_data
     curl -fsSL "$DOKUM_ADRESI" | zstd -d --stdout \
