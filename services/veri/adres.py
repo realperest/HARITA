@@ -200,7 +200,8 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
     baglanti.commit()
     try:
         ham = indir()
-        ayiklanmis = ayikla(ham, veri_dizini)
+        # Turkiye olceginde osmium tags-filter bellek sinirini asiyor (SIGKILL); dosya dogrudan, diskte konum indeksiyle okunur
+        ayiklanmis = ham
         tarih = kaynak_tarihi(ham)
         yol_siniflari = dict(baglanti.execute("SELECT kod, id FROM tnm_yol_sinifi").fetchall())
         yer_turleri = dict(baglanti.execute("SELECT kod, id FROM tnm_yer_turu").fetchall())
@@ -212,7 +213,11 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
         baglanti.commit()
 
         toplayici = Toplayici(baglanti, ad_katla, yol_siniflari, yer_turleri)
-        toplayici.apply_file(str(ayiklanmis), locations=True, idx=f"sparse_file_array,{veri_dizini / 'adres_dugum.idx'}")
+        indeks = veri_dizini / "adres_dugum.idx"
+        try:
+            toplayici.apply_file(str(ayiklanmis), locations=True, idx=f"sparse_file_array,{indeks}")
+        finally:
+            indeks.unlink(missing_ok=True)
         toplayici.bosalt()
         log.info("Okuma bitti: sokak parcasi=%s yer=%s kapi=%s. Eslestirme basliyor...", *toplayici.sayac.values())
 

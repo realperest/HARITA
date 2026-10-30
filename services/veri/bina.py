@@ -122,7 +122,7 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
     baglanti.commit()
     try:
         ham = indir()
-        ayiklanmis = ayikla(ham, veri_dizini)
+        ayiklanmis = ham  # on suzme bellek sinirini asiyordu; dosya dogrudan okunur
         tarih = kaynak_tarihi(ham)
         kullanimlar = dict(baglanti.execute("SELECT kod, id FROM tnm_bina_kullanimi").fetchall())
         baglanti.execute("CREATE UNLOGGED TABLE IF NOT EXISTS gecici_bina (kaynak_anahtari text, tur_id smallint, kullanim_id smallint, "
@@ -130,7 +130,11 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
         baglanti.execute("TRUNCATE gecici_bina")
         baglanti.commit()
         toplayici = Toplayici(baglanti, ad_katla, kullanimlar)
-        toplayici.apply_file(str(ayiklanmis), locations=True, idx=f"sparse_file_array,{veri_dizini / 'bina_dugum.idx'}")
+        indeks = veri_dizini / "bina_dugum.idx"
+        try:
+            toplayici.apply_file(str(ayiklanmis), locations=True, idx=f"sparse_file_array,{indeks}")
+        finally:
+            indeks.unlink(missing_ok=True)
         toplayici.bosalt()
         log.info("Okuma bitti: %s adli bina / site. Esleme basliyor...", toplayici.sayac)
         for sorgu in ISLEM_SQL:
