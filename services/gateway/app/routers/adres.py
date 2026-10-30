@@ -11,7 +11,7 @@ router = APIRouter(prefix="/v1/adres", tags=["adres"])
 
 
 @router.get("/ara")
-async def ara(q: str = Query(min_length=2, max_length=200), tur: Literal["kapi", "sokak", "yer", "yerlesim"] | None = None,
+async def ara(q: str = Query(min_length=2, max_length=200), tur: Literal["kapi", "sokak", "bina", "yer", "yerlesim"] | None = None,
               ust_id: int | None = None, lat: float | None = Query(default=None, ge=-90, le=90),
               lon: float | None = Query(default=None, ge=-180, le=180), limit: int = Query(default=10, ge=1, le=50),
               _proje: dict = Depends(yetki("adres"))) -> list[dict]:
@@ -55,3 +55,26 @@ async def sokak_kapilari(sokak_id: int, limit: int = Query(default=200, ge=1, le
                          _proje: dict = Depends(yetki("adres"))) -> list[dict]:
     """Bir sokaktaki kapi numaralari."""
     return await adres_crud.kapilar(sokak_id, limit, atla)
+
+
+@router.get("/sokak/{sokak_id}/binalar")
+async def sokak_binalari(sokak_id: int, limit: int = Query(default=200, ge=1, le=1000), atla: int = Query(default=0, ge=0),
+                         _proje: dict = Depends(yetki("adres"))) -> list[dict]:
+    """Bir sokaga bagli adli site ve binalar (Site / Bina acilir listesi)."""
+    return await adres_crud.sokak_binalari(sokak_id, limit, atla)
+
+
+@router.get("/mahalle/{mahalle_id}/binalar")
+async def mahalle_binalari(mahalle_id: int, q: str | None = Query(default=None, max_length=100), limit: int = Query(default=200, ge=1, le=1000),
+                           atla: int = Query(default=0, ge=0), _proje: dict = Depends(yetki("adres"))) -> list[dict]:
+    """Bir mahalle / koydeki adli site ve binalar."""
+    return await adres_crud.mahalle_binalari(mahalle_id, q, limit, atla)
+
+
+@router.get("/bina/{bina_id}")
+async def bina(bina_id: int, sinir: bool = False, _proje: dict = Depends(yetki("adres"))) -> dict:
+    """Tek site / bina; sinir=true ile GeoJSON poligonu."""
+    veri = await adres_crud.bina_getir(bina_id, sinir)
+    if veri is None:
+        raise HTTPException(status_code=404, detail="Bina bulunamadi.")
+    return veri

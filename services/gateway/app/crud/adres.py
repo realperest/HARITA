@@ -70,6 +70,19 @@ async def _yer_ara(baglanti, katli: str, ust_id: int | None, lat: float | None, 
     return [_kayit("yer", s, s["ad"], [s["ad"]], s["skor"], {"yer_turu": s["yer_turu"]}) for s in satirlar]
 
 
+async def _bina_ara(baglanti, katli: str, ust_id: int | None, lat: float | None, lon: float | None, limit: int) -> list[dict]:
+    satirlar = await baglanti.fetch(
+        f"""SELECT x.id, x.ad, similarity(x.ad_arama, $1) AS skor, t.kod AS bina_turu, k.kod AS kullanim,
+                   ST_Y(x.merkez::geometry) AS lat, ST_X(x.merkez::geometry) AS lon, {ZINCIR_ALAN},
+                   CASE WHEN $4::float8 IS NULL THEN NULL ELSE ST_Distance(x.merkez, ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography) END AS mesafe
+              FROM bina x JOIN tnm_bina_turu t ON t.id = x.tur_id LEFT JOIN tnm_bina_kullanimi k ON k.id = x.kullanim_id {ZINCIR_JOIN}
+             WHERE x.aktif_mi AND (x.ad_arama LIKE $2 || '%' OR x.ad_arama % $1) AND {UST_FILTRE}
+             ORDER BY (x.ad_arama = $1) DESC, skor DESC, mesafe ASC NULLS LAST
+             LIMIT $6""",
+        katli, _like(katli), ust_id, lat, lon, limit)
+    return [_kayit("bina", s, s["ad"], [s["ad"]], s["skor"], {"bina_turu": s["bina_turu"], "kullanim": s["kullanim"]}) for s in satirlar]
+
+
 async def _kapi_ara(baglanti, sokak_katli: str, no: str, ust_id: int | None, limit: int) -> list[dict]:
     satirlar = await baglanti.fetch(
         f"""SELECT x.id, x.kapi_no, s.ad AS sokak, similarity(s.ad_arama, $1) AS skor,
@@ -94,13 +107,15 @@ async def ara(q: str, tur: str | None, ust_id: int | None, lat: float | None, lo
             sonuc += await _sokak_ara(baglanti, ad_katla(eslesme["sokak"]) if eslesme and sonuc else katli, ust_id, lat, lon, limit)
         if tur in (None, "yer"):
             sonuc += await _yer_ara(baglanti, katli, ust_id, lat, lon, limit)
+        if tur in (None, "bina"):
+            sonuc += await _bina_ara(baglanti, katli, ust_id, lat, lon, limit)
     if tur in (None, "yerlesim"):
         for y in await yerlesim_crud.ara(q, None, ust_id, limit):
             ust = y["ust"] or {}
             sonuc.append({"tur": y["tur"], "id": y["id"], "ad": y["ad"], "merkez": y["merkez"], "mahalle": None, "ilce": None, "il": None,
                           "adres": ", ".join(p for p in (y["ad"], ust.get("ad")) if p), "skor": None, "mesafe_m": None,
                           "ek": {"nufus": y["nufus"], "ust": y["ust"]}})
-    oncelik = {"kapi": 0, "sokak": 1, "yer": 2}
+    oncelik = {"kapi": 0, "sokak": 1, "bina": 2, "yer": 3}
     sonuc.sort(key=lambda r: (oncelik.get(r["tur"], 3), -(r["skor"] or 0)))
     return sonuc[:limit]
 
@@ -122,22 +137,29 @@ async def nokta(lat: float, lon: float, yaricap_m: int, limit: int) -> dict:
             f"""SELECT x.id, x.ad, t.kod AS yer_turu, ST_Y(x.konum::geometry) AS lat, ST_X(x.konum::geometry) AS lon, ST_Distance(x.konum, {p}) AS mesafe,
                        {ZINCIR_ALAN} FROM yer_isareti x JOIN tnm_yer_turu t ON t.id = x.tur_id {ZINCIR_JOIN}
                  WHERE x.aktif_mi AND ST_DWithin(x.konum, {p}, $3) ORDER BY x.konum <-> {p} LIMIT $4""", lat, lon, min(yaricap_m, 300), limit)
+        binalar = await baglanti.fetch(
+            f"""SELECT x.id, x.ad, t.kod AS bina_turu, k.kod AS kullanim, ST_Y(x.merkez::geometry) AS lat, ST_X(x.merkez::geometry) AS lon,
+                       0::float8 AS mesafe, {ZINCIR_ALAN}
+                  FROM bina x JOIN tnm_bina_turu t ON t.id = x.tur_id LEFT JOIN tnm_bina_kullanimi k ON k.id = x.kullanim_id {ZINCIR_JOIN}
+                 WHERE x.aktif_mi AND ST_Covers(x.sinir, {p}) ORDER BY x.tur_id DESC, ST_Area(x.sinir) LIMIT $3""", lat, lon, limit)
     icinde = {s["tur"]: s["ad"] for s in idari["icinde"]}
     mahalle, ilce, il = icinde.get("mahalle_koy"), icinde.get("ilce"), icinde.get("il")
     en_iyi_kapi = next((k for k in kapilar if k["mesafe"] <= 40 and k["sokak"]), None)
     en_iyi_sokak = sokaklar[0] if sokaklar else None
+    bina_adi = binalar[0]["ad"] if binalar else None
     if en_iyi_kapi:
-        adres = adres_metni([f"{en_iyi_kapi['sokak']} No:{en_iyi_kapi['kapi_no']}"], mahalle, ilce, il)
+        adres = adres_metni([bina_adi, f"{en_iyi_kapi['sokak']} No:{en_iyi_kapi['kapi_no']}"], mahalle, ilce, il)
     elif en_iyi_sokak:
-        adres = adres_metni([en_iyi_sokak["ad"]], mahalle, ilce, il)
+        adres = adres_metni([bina_adi, en_iyi_sokak["ad"]], mahalle, ilce, il)
     else:
-        adres = adres_metni([], mahalle, ilce, il)
+        adres = adres_metni([bina_adi], mahalle, ilce, il)
     return {
         "adres": adres, "mahalle": mahalle, "ilce": ilce, "il": il, "idari": idari,
         "sokaklar": [_kayit("sokak", s, s["ad"], [s["ad"]], None, {"sinif": s["sinif"]}) for s in sokaklar],
         "kapilar": [_kayit("kapi", s, f"{s['sokak'] or ''} No:{s['kapi_no']}".strip(), [f"{s['sokak'] or ''} No:{s['kapi_no']}".strip()], None,
                            {"sokak": s["sokak"], "kapi_no": s["kapi_no"]}) for s in kapilar],
         "yerler": [_kayit("yer", s, s["ad"], [s["ad"]], None, {"yer_turu": s["yer_turu"]}) for s in yerler],
+        "binalar": [_kayit("bina", s, s["ad"], [s["ad"]], None, {"bina_turu": s["bina_turu"], "kullanim": s["kullanim"]}) for s in binalar],
     }
 
 
@@ -193,3 +215,43 @@ async def kapilar(sokak_id: int, limit: int, atla: int) -> list[dict]:
             sokak_id, limit, atla)
     return [_kayit("kapi", s, f"{s['sokak']} No:{s['kapi_no']}", [f"{s['sokak']} No:{s['kapi_no']}"], None,
                    {"sokak": s["sokak"], "kapi_no": s["kapi_no"]}) for s in satirlar]
+
+
+async def _bina_listesi(kosul: str, parametreler: list, limit: int, atla: int) -> list[dict]:
+    """Ortak bina / site listesi (kosul $1 icin mahalle veya sokak kimligini bekler)."""
+    async with havuz().acquire() as baglanti:
+        satirlar = await baglanti.fetch(
+            f"""SELECT x.id, x.ad, t.kod AS bina_turu, k.kod AS kullanim, ST_Y(x.merkez::geometry) AS lat, ST_X(x.merkez::geometry) AS lon,
+                       {ZINCIR_ALAN}
+                  FROM bina x JOIN tnm_bina_turu t ON t.id = x.tur_id LEFT JOIN tnm_bina_kullanimi k ON k.id = x.kullanim_id {ZINCIR_JOIN}
+                 WHERE x.aktif_mi AND {kosul} ORDER BY t.id, x.ad_arama LIMIT ${len(parametreler) + 1} OFFSET ${len(parametreler) + 2}""",
+            *parametreler, limit, atla)
+    return [_kayit("bina", s, s["ad"], [s["ad"]], None, {"bina_turu": s["bina_turu"], "kullanim": s["kullanim"]}) for s in satirlar]
+
+
+async def sokak_binalari(sokak_id: int, limit: int, atla: int) -> list[dict]:
+    """Bir sokaga bagli adli site ve binalar (acilir liste icin)."""
+    return await _bina_listesi("x.sokak_id = $1", [sokak_id], limit, atla)
+
+
+async def mahalle_binalari(mahalle_id: int, q: str | None, limit: int, atla: int) -> list[dict]:
+    """Bir mahalle / koydeki adli site ve binalar; q ile ada gore daraltilir."""
+    if q:
+        return await _bina_listesi("x.mahalle_id = $1 AND x.ad_arama LIKE '%' || $2 || '%'", [mahalle_id, ad_katla(q)], limit, atla)
+    return await _bina_listesi("x.mahalle_id = $1", [mahalle_id], limit, atla)
+
+
+async def bina_getir(bina_id: int, sinir: bool) -> dict | None:
+    """Tek site / bina; istenirse GeoJSON poligonu."""
+    async with havuz().acquire() as baglanti:
+        s = await baglanti.fetchrow(
+            f"""SELECT x.id, x.ad, t.kod AS bina_turu, k.kod AS kullanim, ST_Y(x.merkez::geometry) AS lat, ST_X(x.merkez::geometry) AS lon,
+                       x.sokak_id, {'ST_AsGeoJSON(x.sinir::geometry, 6)' if sinir else 'NULL'} AS geo, {ZINCIR_ALAN}
+                  FROM bina x JOIN tnm_bina_turu t ON t.id = x.tur_id LEFT JOIN tnm_bina_kullanimi k ON k.id = x.kullanim_id {ZINCIR_JOIN}
+                 WHERE x.aktif_mi AND x.id = $1""", bina_id)
+    if s is None:
+        return None
+    veri = _kayit("bina", s, s["ad"], [s["ad"]], None, {"bina_turu": s["bina_turu"], "kullanim": s["kullanim"], "sokak_id": s["sokak_id"]})
+    if sinir:
+        veri["sinir"] = json.loads(s["geo"]) if s["geo"] else None
+    return veri

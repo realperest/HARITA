@@ -17,6 +17,7 @@ import osmium
 import psycopg
 
 import adres
+import bina
 
 log = logging.getLogger("yukle")
 
@@ -222,27 +223,61 @@ def yukle(baglanti: psycopg.Connection) -> None:
         raise
 
 
+def adim(ad: str, islev) -> bool:  # noqa: ANN001
+    """Bir yukleme adimini calistirir; hata olursa loglar ve False doner (diger adimlar engellenmez)."""
+    try:
+        islev()
+        return True
+    except Exception:
+        log.exception("%s adimi basarisiz", ad)
+        return False
+
+
+def tur_calistir() -> bool:
+    """Yerlesim, adres ve bina adimlarini sirayla calistirir; hepsi basariliysa True."""
+    with psycopg.connect(DATABASE_URL) as baglanti:
+        tablo_bekle(baglanti)
+
+        def yerlesim_adimi() -> None:
+            if calisma_gerekli(baglanti):
+                yukle(baglanti)
+            else:
+                log.info("Yerlesim verisi guncel, yukleme gerekmiyor.")
+
+        def adres_adimi() -> None:
+            adres.tablo_bekle(baglanti)
+            if adres.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
+                adres.calistir(baglanti, indir, kaynak_tarihi, ad_katla, VERI_DIZINI)
+            else:
+                log.info("Adres verisi guncel, yukleme gerekmiyor.")
+
+        def bina_adimi() -> None:
+            bina.tablo_bekle(baglanti)
+            if bina.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
+                bina.calistir(baglanti, indir, kaynak_tarihi, ad_katla, VERI_DIZINI)
+            else:
+                log.info("Bina verisi guncel, yukleme gerekmiyor.")
+
+        sonuclar = [adim("Yerlesim", yerlesim_adimi)]
+        # Adres ve bina, mahalle sinirlarina baglidir; yerlesim basarisizsa atlanir
+        if sonuclar[0]:
+            sonuclar.append(adim("Adres", adres_adimi))
+            sonuclar.append(adim("Bina", bina_adimi))
+        return all(sonuclar)
+
+
 def main() -> None:
-    """Sonsuz dongu: gerektiginde yukle, sonra bekle."""
+    """Sonsuz dongu: gerektiginde yukle; hata olursa 30 dakika sonra, aksi halde KONTROL_SAAT sonra yeniden bak."""
     logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(asctime)s %(levelname)s %(message)s")
     while True:
         try:
-            with psycopg.connect(DATABASE_URL) as baglanti:
-                tablo_bekle(baglanti)
-                if calisma_gerekli(baglanti):
-                    yukle(baglanti)
-                else:
-                    log.info("Yerlesim verisi guncel, yukleme gerekmiyor.")
-                adres.tablo_bekle(baglanti)
-                if adres.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
-                    adres.calistir(baglanti, indir, kaynak_tarihi, ad_katla, VERI_DIZINI)
-                else:
-                    log.info("Adres verisi guncel, yukleme gerekmiyor.")
+            tamam = tur_calistir()
         except Exception:
-            log.exception("Yukleyici dongusunde hata; bir sonraki kontrolde yeniden denenecek")
+            log.exception("Yukleyici dongusunde hata; yeniden denenecek")
+            tamam = False
         if TEK_SEFER:
             return
-        time.sleep(KONTROL_SAAT * 3600)
+        time.sleep(KONTROL_SAAT * 3600 if tamam else 1800)
 
 
 if __name__ == "__main__":
