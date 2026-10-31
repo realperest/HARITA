@@ -888,17 +888,25 @@ async function durakSil(i) {
 
 async function onizlemeHesapla() {
   if (!durum.duraklar.length) return;
+  // Konum yoksa: birden cok durakta rota ilk duraktan baslar, tek hedefte harita merkezinden
   let baslangic = durum.konum;
-  if (!baslangic) {
+  let duraklar = durum.duraklar;
+  let ilkDurak = 0;
+  let not = '';
+  if (!baslangic && durum.duraklar.length > 1) {
+    [baslangic, ilkDurak, duraklar] = [durum.duraklar[0], 1, durum.duraklar.slice(1)];
+    not = 'Konum yok: rota ilk duraktan başlıyor. Simülasyonla deneyebilirsiniz.';
+  } else if (!baslangic) {
     const c = harita.getCenter();
     baslangic = { lat: c.lat, lon: c.lng };
+    not = 'Konum yok: başlangıç harita merkezi alındı. Simülasyonla deneyebilirsiniz.';
   }
   planMesaj('Rota hesaplanıyor...');
   try {
-    const rota = await rotaIste(baslangic, durum.duraklar);
+    const rota = await rotaIste(baslangic, duraklar, ilkDurak);
     rotaAyarla(rota);
     durum.mod = 'onizleme';
-    planMesaj(durum.konum ? '' : 'Konum yok: başlangıç harita merkezi alındı. Simülasyonla deneyebilirsiniz.', durum.konum ? '' : 'uyari');
+    planMesaj(not, not ? 'uyari' : '');
     arayuzGuncelle();
     ozetYaz(rota.sure, rota.toplam, durum.konum?.hiz);
     rotayaSigdir(rota);
@@ -951,6 +959,9 @@ async function navBaslat() {
       }
     }
   }
+  // Rota ilk duraktan basladiysa (konumsuz simulasyon) o durak gecilmis sayilir
+  durum.gecilenDurak = durum.rota.ilkDurak;
+  duraklariCiz();
   Object.assign(durum, { mod: 'nav', takip: true, sapmaSayac: 0, sonYenidenRota: 0 });
   arayuzGuncelle();
   ekranAcikTut(true);

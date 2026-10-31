@@ -419,6 +419,20 @@ def calistir() -> None:
         noktalar = [{"lat": 40.985 + (i // 6) * 0.006, "lon": 29.035 + (i % 6) * 0.006} for i in range(30)]
         esit(api("POST", "/v1/rota", {"noktalar": noktalar, "profil": "motosiklet", "geometri": False}))
 
+    @kontrol("rota: uzun motosiklet turu (Edirne > Kars)")
+    def _():
+        y = api("POST", "/v1/rota", {"noktalar": [{"lat": 41.677, "lon": 26.555}, {"lat": 40.601, "lon": 43.097}], "profil": "motosiklet", "geometri": False})
+        esit(y)
+        return f"{y.json()['mesafe_m'] / 1000:.0f} km"
+
+    @kontrol("rota: uzak grup varis suresi (motosiklet matrisi 600 km)")
+    def _():
+        y = api("POST", "/valhalla/sources_to_targets", {"sources": [{"lat": 41.0082, "lon": 28.9784}, {"lat": 39.9334, "lon": 32.8597}],
+                                                          "targets": [{"lat": 38.4237, "lon": 27.1428}], "costing": "motorcycle"})
+        esit(y)
+        sureler = [s[0]["time"] for s in y.json()["sources_to_targets"]]
+        assert all(s is not None for s in sureler), f"ulasilamayan: {sureler}"
+
     @kontrol("yol: konumdaki yol bilgisi")
     def _():
         y = api("GET", "/v1/yol/nokta?lat=41.0369&lon=28.9850")
@@ -467,7 +481,9 @@ def calistir() -> None:
             esit(okuma)  # alan adi dogru mu: okuma 200 donmeli, yoksa asagidaki red yanlis nedenle gecer
             # Kabul edilse bile zararsiz: oturuma ozel gecici tablo (canli veriye dokunmaz)
             y = yonetim("POST", "/yonetim/veritabani/sql", {"sorgu": "CREATE TEMP TABLE canli_test_gecici (x int)"})
-            assert y.durum >= 400 and y.durum != 422, f"yazma sorgusu reddedilmedi ya da istek gecersiz (HTTP {y.durum})"
+            # Red 422 ve "salt okunur" aciklamasiyla gelir; alan adi hatasi (Pydantic 422) liste bicimli detay dondurur
+            detay = y.json().get("detail") if y.govde else None
+            assert y.durum == 422 and isinstance(detay, str) and "salt okunur" in detay, f"yazma sorgusu reddedilmedi (HTTP {y.durum}: {detay})"
 
     # ---------- Deneme sayfalari ----------
     if DENEME:

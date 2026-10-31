@@ -27,6 +27,25 @@ services:
     cpus: 2.0
     image: ghcr.io/valhalla/valhalla-scripted:3.9.1
     restart: unless-stopped
+    # Valhalla varsayilan sinirlari Turkiye icin dar: motosiklet rotasi 500 km, matris (grup varis suresi, optimize sira)
+    # arac 400 km / motosiklet 200 km. Mevcut valhalla.json her acilista korunur; sinirlar baslamadan once yukseltilir.
+    # Ilk kurulumda dosya henuz yoktur: kurulum bitince servis bir kez yeniden baslatilinca sinirlar uygulanir.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        f=/custom_files/valhalla.json
+        if [ -f "$$f" ]; then
+          jq '.service_limits.auto.max_matrix_distance = 2500000
+            | .service_limits.motorcycle.max_distance = 2500000 | .service_limits.motorcycle.max_matrix_distance = 2500000
+            | .service_limits.bicycle.max_distance = 1000000 | .service_limits.bicycle.max_matrix_distance = 500000
+            | .service_limits.auto.max_locations = 50 | .service_limits.motorcycle.max_locations = 50
+            | .service_limits.bicycle.max_locations = 50 | .service_limits.pedestrian.max_locations = 50' "$$f" | sponge "$$f"
+          echo "HARITA: servis sinirlari yukseltildi"
+        fi
+        exec /valhalla/scripts/docker-entrypoint.sh "$$@"
+      - rota
+    command: ["build_tiles"]
     environment:
       tile_urls: ${OSM_VERI_ADRESI:-https://download.geofabrik.de/europe/turkey-latest.osm.pbf}
       server_threads: ${ROTA_IS_PARCACIGI:-2}
