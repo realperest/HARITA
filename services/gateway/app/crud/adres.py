@@ -116,7 +116,17 @@ async def ara(q: str, tur: str | None, ust_id: int | None, lat: float | None, lo
                           "adres": ", ".join(p for p in (y["ad"], ust.get("ad")) if p), "skor": None, "mesafe_m": None,
                           "ek": {"nufus": y["nufus"], "ust": y["ust"]}})
     oncelik = {"kapi": 0, "sokak": 1, "bina": 2, "yer": 3}
-    sonuc.sort(key=lambda r: (oncelik.get(r["tur"], 3), -(r["skor"] or 0)))
+    # Tam ad eslesmesi her turun onune gecer (or. "kadikoy" -> once ilce, sonra sehir/mahalle, yer, bina, en son sokak);
+    # yakinlik verildiyse esitlikte yakin olan one gelir. Tam eslesme yoksa eski tur onceligi ve skor siralamasi surer.
+    tam_sira = {"il": 0, "ilce": 1, "sehir": 2, "kasaba": 2, "mahalle_koy": 3, "semt": 3, "koy": 3, "yer": 4, "bina": 5, "mezra": 5, "kapi": 6, "sokak": 7}
+
+    def anahtar(r: dict) -> tuple:
+        tam = ad_katla(r["ad"]) == katli
+        if tam:
+            return (0, tam_sira.get(r["tur"], 6), r["mesafe_m"] if r["mesafe_m"] is not None else 1e12, 0.0)
+        return (1, oncelik.get(r["tur"], 3), 0, -(r["skor"] or 0))
+
+    sonuc.sort(key=anahtar)
     return sonuc[:limit]
 
 
