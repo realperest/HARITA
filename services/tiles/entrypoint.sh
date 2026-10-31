@@ -1,25 +1,10 @@
 #!/bin/bash
 # Karo servisi baslaticisi: veri yoksa Protomaps gunluk yapisindan Turkiye kesitini indirir, sonra pmtiles + nginx'i calistirir.
+# Aylik yenileme (yenile.sh) ve yenileme sonrasi acilis kontrolu (acilis-kontrol.sh) arka planda calisir.
 set -euo pipefail
+. /ortak.sh
 
-VERI_DIZINI=/veri
-DOSYA="$VERI_DIZINI/turkiye.pmtiles"
-KAPSAM_KUTUSU="${KAPSAM_KUTUSU:-25.6,35.8,44.9,42.2}"
-MAKS_YAKINLASTIRMA="${MAKS_YAKINLASTIRMA:-15}"
 export IZINLI_KOKEN_REGEX="${IZINLI_KOKEN_REGEX:-.*}"
-
-# En yeni gunluk yapiyi bul (bugunden geriye 10 gun denenir)
-en_yeni_yapi() {
-    for gun in $(seq 0 10); do
-        tarih=$(date -u -d "-${gun} day" +%Y%m%d)
-        adres="https://build.protomaps.com/${tarih}.pmtiles"
-        if curl -fsI --max-time 20 "$adres" > /dev/null; then
-            echo "$adres"
-            return 0
-        fi
-    done
-    return 1
-}
 
 if [ ! -s "$DOSYA" ]; then
     echo "[karo] Turkiye karolari yok, indiriliyor (bir kereye mahsus, birkac GB)..."
@@ -40,8 +25,15 @@ envsubst '${IZINLI_KOKEN_REGEX}' < /etc/nginx/harita.conf.template > /etc/nginx/
 # TileJSON (/tiles/turkiye.json) icin genel adres gerekir
 pmtiles serve "$VERI_DIZINI" --port=8081 --public-url="${KARO_GENEL_ADRESI:-http://localhost:8080}/tiles" &
 PMTILES_PID=$!
+echo "$PMTILES_PID" > /tmp/pmtiles.pid
 nginx -g 'daemon off;' &
 NGINX_PID=$!
+
+# Aylik yenileme zamanlayicisi (AYLIK_YENILEME=False ile kapatilir) ve yenileme sonrasi acilis kontrolu
+if [ "${AYLIK_YENILEME:-True}" = "True" ]; then
+    /yenile.sh &
+fi
+/acilis-kontrol.sh &
 
 # Biri olurse konteyner kapanir ve Coolify yeniden baslatir
 wait -n "$PMTILES_PID" "$NGINX_PID"

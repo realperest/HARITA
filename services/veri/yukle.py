@@ -19,13 +19,13 @@ import psycopg
 import adres
 import bina
 import uyari
+from dogrulama import aktif_say, bekleme_sn, esik_sn, oran_dogrula
 
 log = logging.getLogger("yukle")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 VERI_ADRESI = os.environ.get("VERI_ADRESI", "https://download.geofabrik.de/europe/turkey-latest.osm.pbf")
 VERI_DIZINI = Path(os.environ.get("VERI_DIZINI", "/veri"))
-GUNCELLEME_GUN = int(os.environ.get("GUNCELLEME_GUN", "30"))
 KONTROL_SAAT = float(os.environ.get("KONTROL_SAAT", "6"))
 TEK_SEFER = os.environ.get("TEK_SEFER") == "1"          # deneme: bir kez calis ve cik
 ZORLA = os.environ.get("ZORLA") == "1"                  # son basarili yuklemeye bakmadan calis
@@ -170,12 +170,12 @@ def tablo_bekle(baglanti: psycopg.Connection) -> None:
 
 
 def calisma_gerekli(baglanti: psycopg.Connection) -> bool:
-    """Son basarili yukleme yoksa veya GUNCELLEME_GUN'den eskiyse True."""
+    """Son basarili yukleme yoksa veya son aylik zamanlamadan (ayin 1'i 05:00 TSI) eskiyse True."""
     if ZORLA:
         return True
     son = baglanti.execute(
-        """SELECT bitis < now() - make_interval(days => %s) FROM yerlesim_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
-            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (GUNCELLEME_GUN,)).fetchone()
+        """SELECT bitis < now() - make_interval(secs => %s) FROM yerlesim_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
+            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (esik_sn(),)).fetchone()
     return son is None or bool(son[0])
 
 
@@ -187,6 +187,7 @@ def yukle(baglanti: psycopg.Connection) -> None:
     surum = baglanti.execute("INSERT INTO yerlesim_surum (durum_id) VALUES ((SELECT id FROM tnm_islem_durumu WHERE kod = 'calisiyor')) "
                              "RETURNING id").fetchone()[0]
     baglanti.commit()
+    onceki = aktif_say(baglanti, "yerlesim")
     try:
         ham = indir()
         ayiklanmis = ayikla(ham)
@@ -207,6 +208,7 @@ def yukle(baglanti: psycopg.Connection) -> None:
             baglanti.execute(sorgu, {"surum": surum})
             baglanti.commit()
         baglanti.execute(MERKEZ_SQL, {"surum": surum})
+        oran_dogrula(baglanti, "yerlesim", surum, onceki)
         baglanti.execute("UPDATE yerlesim SET aktif_mi = FALSE, guncelleme = now() WHERE aktif_mi AND surum_id IS DISTINCT FROM %(surum)s",
                          {"surum": surum})
         adet = baglanti.execute("SELECT count(*) FROM yerlesim WHERE aktif_mi").fetchone()[0]
@@ -237,6 +239,7 @@ def adim(ad: str, islev) -> bool:  # noqa: ANN001
 
 def tur_calistir() -> bool:
     """Yerlesim, yol uyarisi, adres ve bina adimlarini sirayla calistirir; hepsi basariliysa True."""
+    esik = esik_sn()
     with psycopg.connect(DATABASE_URL) as baglanti:
         tablo_bekle(baglanti)
 
@@ -248,21 +251,21 @@ def tur_calistir() -> bool:
 
         def adres_adimi() -> None:
             adres.tablo_bekle(baglanti)
-            if adres.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
+            if adres.gerekli_mi(baglanti, esik, ZORLA):
                 adres.calistir(baglanti, indir, kaynak_tarihi, ad_katla, VERI_DIZINI)
             else:
                 log.info("Adres verisi guncel, yukleme gerekmiyor.")
 
         def bina_adimi() -> None:
             bina.tablo_bekle(baglanti)
-            if bina.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
+            if bina.gerekli_mi(baglanti, esik, ZORLA):
                 bina.calistir(baglanti, indir, kaynak_tarihi, ad_katla, VERI_DIZINI)
             else:
                 log.info("Bina verisi guncel, yukleme gerekmiyor.")
 
         def uyari_adimi() -> None:
             uyari.tablo_bekle(baglanti)
-            if uyari.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
+            if uyari.gerekli_mi(baglanti, esik, ZORLA):
                 uyari.calistir(baglanti, indir, kaynak_tarihi, VERI_DIZINI)
             else:
                 log.info("Yol uyarisi verisi guncel, yukleme gerekmiyor.")
@@ -276,7 +279,7 @@ def tur_calistir() -> bool:
 
 
 def main() -> None:
-    """Sonsuz dongu: gerektiginde yukle; hata olursa 30 dakika sonra, aksi halde KONTROL_SAAT sonra yeniden bak."""
+    """Sonsuz dongu: gerektiginde yukle; hata olursa 30 dakika sonra, aksi halde bir sonraki aylik zamanlamada (ayin 1'i 05:00 TSI) yeniden bak."""
     logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(asctime)s %(levelname)s %(message)s")
     while True:
         try:
@@ -286,7 +289,7 @@ def main() -> None:
             tamam = False
         if TEK_SEFER:
             return
-        time.sleep(KONTROL_SAAT * 3600 if tamam else 1800)
+        time.sleep(bekleme_sn(KONTROL_SAAT * 3600) if tamam else 1800)
 
 
 if __name__ == "__main__":

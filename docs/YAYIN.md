@@ -30,11 +30,23 @@ Gonderim (push) dagitimi kendiliginden baslatmaz: degisiklikten sonra Coolify'da
 Hazirlik: `GET https://HARITA-API/saglik/hazir` hepsi (`veritabani`, `redis`, `rota`, `adres`) `true` olunca 200 doner.
 Her servis kalici hacim kullanir; yeniden dagitimda veri silinmez. Yayindan sonra: `python scripts/canli-test.py`.
 
-## Veri guncelleme
+## Veri guncelleme (otomatik, aylik)
 
-Aylik: `harita_karo` hacmindeki `turkiye.pmtiles` dosyasini silip tiles servisini yeniden baslatin (yeni kesit iner); rota icin
-`force_rebuild=True` ile tek seferlik yeniden baslatma. Adres / yerlesim verisini `veri` servisi `GUNCELLEME_GUN` (30) gunde bir
-kendisi tazeler. Karo ve rota tazelemesini zamanlanmis isle otomatiklestirmek ayri bir gelistirmedir.
+Her ayin 1'i 05:00 Turkiye saatinde (02:00 UTC) uc servis kendi verisini yeniler; yenileme sirasinda canli veri degismez, yeni veri
+once yan tarafta hazirlanir ve dogrulanir, gecerse degistirilir. Insan onayi gerekmez. Kapatmak icin `AYLIK_YENILEME=False`.
+Servis o anda kapaliysa acilista telafi eder; basarisiz olursa 3 saat arayla en cok 4 kez dener, canli veri bozulmaz.
+
+| Servis | Ne yapar | Dogrulama | Yedek (bir sonraki yenilemeye kadar durur) |
+|---|---|---|---|
+| `tiles` | En yeni Protomaps yapisindan Turkiye kesitini `turkiye.pmtiles.yeni` olarak indirir, degistirir, il paketlerini yeniden uretir | Boyut oraninin %80-%250 olmasi, `pmtiles verify`, ornek karolarin (Istanbul, Ankara z10) okunmasi; degisimden sonra acilis kontrolu, sorunda otomatik geri alma | `turkiye.pmtiles.yedek`, `paket.yedek/` (`harita_karo` hacminde) |
+| `rota` | Yeni Geofabrik PBF'ini indirir, `custom_files/yeni_kurulum` altinda yeni Valhalla grafini kurar, degistirir, yalniz Valhalla'yi yeniden baslatir | PBF boyutu / bicimi, gecici servis (port 8012) ile ornek rotalar (Istanbul-Ankara auto / motosiklet, kisa yaya) uzunluk araligi ve canli servisle %10 karsilastirma; degisimden sonra canli servisle tekrar, sorunda otomatik geri alma | `valhalla_tiles.yedek`, `valhalla_tiles.tar.yedek`, `admins.sqlite.yedek`, `*.pbf.yedek` (`harita_rota2` hacminde) |
+| `veri` | Yerlesim, adres (sokak / yer / kapi), bina ve yol uyarisi verisini PostGIS'e yukler | Yeni yukleme onceki aktif kayit sayisinin en az %90'ini uretmeli (`VERI_EN_AZ_ORAN`), degilse eski kayitlar pasiflestirilmez ve yukleme hata sayilir | Eski kayitlar `aktif_mi = FALSE` olarak veritabaninda kalir |
+
+Ilk dagitimda bulunulan ay "yapildi" sayilir (damga dosyalari `.karo_son_ay`, `.rota_son_ay`); ilk otomatik yenileme bir sonraki ayin 1'idir.
+Elle tetiklemek icin ilgili konteynerde `YENILEME_ZORLA=1 YENILEME_TEK_SEFER=1 /yenile.sh` (tiles) ya da `/rota-yenile.sh` (rota); veri icin
+`ZORLA=1` ortam degiskeni. Yenileme gunlukleri konteyner loglarinda `[karo ...]` ve `[rota-yenile ...]` onekleriyle gorunur.
+Rakim (yukseklik) acik kuruluysa (`ROTA_YUKSEKLIK=True`) yan graf da yukseklikle kurulur. Yedekler disk kaplar (karo + paketler + rota grafi);
+bir sonraki yenileme onceki yedegi siler.
 
 ## Yukseklik (rakim) verisi
 

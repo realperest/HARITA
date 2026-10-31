@@ -8,6 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends osmium-tool ca-
 WORKDIR /uygulama
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY yukle.py adres.py bina.py uyari.py ./
+COPY yukle.py adres.py bina.py uyari.py dogrulama.py ./
 
 CMD ["python", "-u", "yukle.py"]

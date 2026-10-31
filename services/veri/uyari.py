@@ -13,6 +13,8 @@ from pathlib import Path
 import osmium
 import psycopg
 
+from dogrulama import aktif_say, oran_dogrula
+
 log = logging.getLogger("uyari")
 
 KESICI_TURLERI = {"bump", "hump", "table", "cushion", "yes"}
@@ -64,13 +66,13 @@ def tablo_bekle(baglanti: psycopg.Connection) -> None:
     raise RuntimeError("yol_uyari tablosu olusmadi")
 
 
-def gerekli_mi(baglanti: psycopg.Connection, guncelleme_gun: int, zorla: bool) -> bool:
-    """Son basarili yukleme yoksa veya guncelleme_gun'den eskiyse True."""
+def gerekli_mi(baglanti: psycopg.Connection, esik_sn: float, zorla: bool) -> bool:
+    """Son basarili yukleme yoksa veya esik_sn'den eskiyse True."""
     if zorla:
         return True
     son = baglanti.execute(
-        """SELECT bitis < now() - make_interval(days => %s) FROM yol_uyari_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
-            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (guncelleme_gun,)).fetchone()
+        """SELECT bitis < now() - make_interval(secs => %s) FROM yol_uyari_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
+            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (esik_sn,)).fetchone()
     return son is None or bool(son[0])
 
 
@@ -82,6 +84,7 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, veri_dizini: Pa
     surum = baglanti.execute(f"INSERT INTO yol_uyari_surum (durum_id) VALUES ({durum('calisiyor')}) RETURNING id").fetchone()[0]
     baglanti.commit()
     hedef = veri_dizini / "uyari.osm.pbf"
+    onceki = aktif_say(baglanti, "yol_uyari")
     try:
         ham = indir()
         tarih = kaynak_tarihi(ham)
@@ -96,6 +99,7 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, veri_dizini: Pa
                    ON CONFLICT (kaynak_anahtari) DO UPDATE SET tur_id = EXCLUDED.tur_id, konum = EXCLUDED.konum,
                         hiz_siniri = EXCLUDED.hiz_siniri, yon = EXCLUDED.yon, surum_id = EXCLUDED.surum_id, aktif_mi = TRUE""",
                 [(*s, surum) for s in toplayici.satirlar])
+        oran_dogrula(baglanti, "yol_uyari", surum, onceki)
         baglanti.execute("UPDATE yol_uyari SET aktif_mi = FALSE WHERE aktif_mi AND surum_id IS DISTINCT FROM %s", (surum,))
         adet = baglanti.execute("SELECT count(*) FROM yol_uyari WHERE aktif_mi").fetchone()[0]
         baglanti.execute(f"UPDATE yol_uyari_surum SET durum_id = {durum('tamam')}, bitis = now(), adet = %s, kaynak_tarihi = %s::timestamptz "
