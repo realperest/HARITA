@@ -32,7 +32,7 @@ from pathlib import Path
 API = os.environ.get("HARITA_API", "https://harita-api.89.45.45.152.sslip.io").rstrip("/")
 KARO = os.environ.get("HARITA_KARO", "https://harita-karo.89.45.45.152.sslip.io").rstrip("/")
 YONETIM = os.environ.get("HARITA_YONETIM_ANAHTARI", "")
-TUM_SERVISLER = ["rota", "matris", "arama", "yapilandirma", "yerlesim", "adres", "valhalla"]
+TUM_SERVISLER = ["rota", "matris", "arama", "yapilandirma", "yerlesim", "adres", "valhalla", "canli"]
 
 # Mobil uygulama kabuklari (Capacitor / Ionic) bu kokenlerden istek atar
 MOBIL_KOKENLER = ["https://localhost", "capacitor://localhost", "http://localhost"]
