@@ -64,17 +64,17 @@ async def kullanimi_say(proje_id: int, servis_kod: str, ozet: str) -> None:
         log.exception("Kullanim sayaci yazilamadi (proje=%s, servis=%s)", proje_id, servis_kod)
 
 
-async def _izinleri_yaz(baglanti: asyncpg.Connection, proje_id: int, servisler: list[str]) -> None:
-    """Projenin servis izinlerini verilen listeyle degistirir (listedekiler 'gorebilir')."""
+async def _izinleri_yaz(baglanti: asyncpg.Connection, proje_id: int, servisler: list[str] | None) -> None:
+    """Projenin servis izinlerini verilen listeyle degistirir (listedekiler 'gorebilir'). None = tum servisler."""
     await baglanti.execute("DELETE FROM proje_servis_izni WHERE proje_id = $1", proje_id)
     bulunan = await baglanti.fetchval(
         """INSERT INTO proje_servis_izni (proje_id, servis_id, izin_seviyesi_id)
            SELECT $1, s.id, (SELECT id FROM tnm_izin_seviyesi WHERE kod = 'gorebilir')
-             FROM tnm_servis s WHERE s.kod = ANY($2::text[])
+             FROM tnm_servis s WHERE $2::text[] IS NULL OR s.kod = ANY($2::text[])
            RETURNING 1""",
         proje_id, servisler,
-    ) if servisler else None
-    if servisler and bulunan is None:
+    ) if servisler is None or servisler else None
+    if (servisler is None or servisler) and bulunan is None:
         raise ValueError("Gecerli servis kodu bulunamadi.")
 
 
@@ -88,7 +88,7 @@ async def _kaynaklari_yaz(baglanti: asyncpg.Connection, proje_id: int, kaynaklar
         )
 
 
-async def olustur(ad: str, aciklama: str | None, dakika_limiti: int, servisler: list[str], kaynaklar: list[str],
+async def olustur(ad: str, aciklama: str | None, dakika_limiti: int, servisler: list[str] | None, kaynaklar: list[str],
                   ozet: str, on_ek: str) -> int:
     """Proje, ilk anahtar, izinler ve kaynaklari tek islemde olusturur; proje id'sini dondurur."""
     async with havuz().acquire() as baglanti:

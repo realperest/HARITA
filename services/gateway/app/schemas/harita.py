@@ -51,8 +51,7 @@ class ProjeOlustur(BaseModel):
     ad: str = Field(min_length=2, max_length=80)
     aciklama: str | None = Field(default=None, max_length=300)
     dakika_limiti: int = Field(default=600, ge=1, le=100000)
-    servisler: list[str] = Field(default_factory=lambda: ["rota", "matris", "arama", "yapilandirma", "yerlesim", "adres", "valhalla",
-                                                              "canli"])
+    servisler: list[str] | None = None  # verilmezse tum servisler (yeni servisler dahil) acilir
     kaynaklar: list[str] = Field(default_factory=list)
 
 

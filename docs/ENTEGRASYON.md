@@ -23,6 +23,8 @@ Anahtarlar git disi `baglantilar/<ad>.env` dosyasina projenin kullanacagi adlarl
 | `OSRM_ADRESI` | OSRM bekleyen kod (SIPARIS `yol_agi.py`): yalniz adres degisir |
 | `VITE_HARITA_API_ADRESI`, `VITE_HARITA_KARO_ADRESI`, `VITE_HARITA_ANAHTARI` | Frontend derlemesi (Cloudflare Pages ortam degiskeni) |
 
+**Yeni ozellikler otomatik acilir:** gateway'e yeni bir servis eklendiginde (sema betigi), acilista mevcut tum projelere bir kez "gorebilir" izni verilir; yeni projeler her servisle baslar. Yonetici bir projeden izni kaldirirsa geri eklenmez. Yonetim uclari proje anahtarina hicbir zaman acilmaz.
+
 Betik tekrar calistirilinca anahtar uretmez, yalniz alan adlarini ve kotayi esitler; anahtar kaybolursa `--yeni-anahtar`.
 Hazir ayarlarin alan adlari `scripts/proje-bagla.py` icindeki `HAZIR_AYARLAR`'dadir; yeni alan adi eklenince betik yeniden calistirilir.
 Projeyi gercekten baglamak, yukaridaki degiskenleri o projenin ortamina girip kodunu asagidaki uclara cevirmektir (proje bazinda ayri is).

@@ -136,3 +136,27 @@ async def test_kullanim_sayaci(istemci):
         await istemci.get("/v1/yapilandirma", headers={"X-Harita-Anahtar": anahtar})
     kullanim = (await istemci.get(f"/yonetim/projeler/{proje_id}/kullanim", headers=YONETIM)).json()
     assert kullanim and kullanim[0]["servis"] == "yapilandirma" and kullanim[0]["adet"] == 3
+
+
+async def test_yeni_servis_mevcut_projelere_otomatik_acilir(istemci):
+    """Sonradan eklenen servis, mevcut tum projelere bir kez acilir; yeni projeler her servisle baslar."""
+    from app import db
+    proje_id, _ = await proje_ac(istemci, servisler=["rota"])
+    kod = "test_" + uuid.uuid4().hex[:6]
+    async with db.havuz().acquire() as baglanti:
+        servis_id = await baglanti.fetchval("INSERT INTO tnm_servis (id, kod, ad) VALUES ((SELECT max(id) + 1 FROM tnm_servis), $1, 'test') RETURNING id", kod)
+        await db._yeni_servisleri_ac(baglanti)
+        assert await baglanti.fetchval("SELECT 1 FROM proje_servis_izni WHERE proje_id = $1 AND servis_id = $2", proje_id, servis_id) == 1
+        # yonetici izni kaldirirsa sonraki acilista geri eklenmez
+        await baglanti.execute("DELETE FROM proje_servis_izni WHERE proje_id = $1 AND servis_id = $2", proje_id, servis_id)
+        await db._yeni_servisleri_ac(baglanti)
+        assert await baglanti.fetchval("SELECT 1 FROM proje_servis_izni WHERE proje_id = $1 AND servis_id = $2", proje_id, servis_id) is None
+        await baglanti.execute("DELETE FROM sema_gocu WHERE ad = $1", "servis_otomatik_" + kod)
+        await baglanti.execute("DELETE FROM proje_servis_izni WHERE servis_id = $1", servis_id)
+        await baglanti.execute("DELETE FROM tnm_servis WHERE id = $1", servis_id)
+    # servisler verilmeyen yeni proje tum servisleri alir
+    yeni_id, _ = await proje_ac(istemci)
+    async with db.havuz().acquire() as baglanti:
+        eksik = await baglanti.fetchval(
+            "SELECT count(*) FROM tnm_servis s WHERE NOT EXISTS (SELECT 1 FROM proje_servis_izni i WHERE i.proje_id = $1 AND i.servis_id = s.id)", yeni_id)
+    assert eksik == 0

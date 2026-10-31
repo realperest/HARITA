@@ -32,7 +32,6 @@ from pathlib import Path
 API = os.environ.get("HARITA_API", "https://harita-api.89.45.45.152.sslip.io").rstrip("/")
 KARO = os.environ.get("HARITA_KARO", "https://harita-karo.89.45.45.152.sslip.io").rstrip("/")
 YONETIM = os.environ.get("HARITA_YONETIM_ANAHTARI", "")
-TUM_SERVISLER = ["rota", "matris", "arama", "yapilandirma", "yerlesim", "adres", "valhalla", "canli"]
 
 # Mobil uygulama kabuklari (Capacitor / Ionic) bu kokenlerden istek atar
 MOBIL_KOKENLER = ["https://localhost", "capacitor://localhost", "http://localhost"]
@@ -103,7 +102,7 @@ def proje_saglama(ad: str, aciklama: str, limit: int, kaynaklar: list[str], mevc
         if kuru:
             return None
         durum, veri = istek("POST", "/yonetim/projeler", {"ad": ad, "aciklama": aciklama, "dakika_limiti": limit,
-                                                         "servisler": TUM_SERVISLER, "kaynaklar": kaynaklar})
+                                                         "kaynaklar": kaynaklar})
         if durum != 201:
             raise SystemExit(f"{ad} olusturulamadi (HTTP {durum}): {veri}")
         return veri["anahtar"]
@@ -111,7 +110,7 @@ def proje_saglama(ad: str, aciklama: str, limit: int, kaynaklar: list[str], mevc
     print(f"  = {ad}: zaten var (id {kayit['id']}); kaynaklar ve kota esitleniyor")
     if not kuru:
         durum, veri = istek("PATCH", f"/yonetim/projeler/{kayit['id']}", {"aktif": True, "dakika_limiti": limit,
-                                                                         "servisler": TUM_SERVISLER, "kaynaklar": kaynaklar})
+                                                                         "kaynaklar": kaynaklar})
         if durum != 200:
             raise SystemExit(f"{ad} guncellenemedi (HTTP {durum}): {veri}")
     if not yeni_anahtar:
