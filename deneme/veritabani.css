@@ -29,6 +29,9 @@ html, body {
   line-height: 1.4;
 }
 
+/* hidden ozniteligi display kurallarina (orn. .uygulama grid) yenilmesin */
+[hidden] { display: none !important; }
+
 .soluk { color: var(--metin-ikincil); }
 .mono, .surum, .hucre, .sql-girdi { font-family: var(--font-sayi); font-variant-numeric: tabular-nums; }
 
