@@ -1,4 +1,5 @@
 [
+  {"surum": "261031.2248", "not": "Secilen sokak / bina dis cizgisi kalin, ici neredeyse seffaf; genel hafif mahalle / ilce taramasi geri geldi"},
   {"surum": "261031.2243", "not": "Secilen cadde-sokak / bina-site / numara / yer kalin turuncu vurguyla gosterilir ve yakinlasilir; varsayilan mahalle-ilce taramasi kaldirildi (alan dugmeleriyle eklenir)"},
   {"surum": "261031.2236", "not": "Haritadaki ek yer (POI) isaretleri varsayilan gizli, Yerler kutusuyla acilir; aramada yerler (or. Pizza Hut) her zaman bulunur"},
   {"surum": "261031.2231", "not": "Pin sekmesinde son secilen il / ilce / mahalle combosunun siniri isaretlenir ve yakinlasilir"},

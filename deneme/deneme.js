@@ -317,8 +317,8 @@ class MapLibreMotoru {
     h.addLayer({ id: 'izokron-cizgi', type: 'line', source: 'izokron', paint: { 'line-color': ['get', 'renk'], 'line-width': 2 } });
     h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#F5A623', 'fill-opacity': 0.08 } });
     h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#F5A623', 'line-width': 2 } });
-    // Secilen sokak / bina / kapi: tarama alanindan ayirt edilsin diye kalin, beyaz kenarli ve opak turuncu
-    h.addLayer({ id: 'vurgu-dolgu', type: 'fill', source: 'vurgu', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': VURGU_RENGI, 'fill-opacity': 0.5 } });
+    // Secilen sokak / bina / kapi: kalin beyaz kenarli turuncu dis cizgi; ici neredeyse seffaf (yapilar secilebilsin)
+    h.addLayer({ id: 'vurgu-dolgu', type: 'fill', source: 'vurgu', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': VURGU_RENGI, 'fill-opacity': 0.1 } });
     h.addLayer({ id: 'vurgu-kenar', type: 'line', source: 'vurgu', filter: ['!=', ['geometry-type'], 'Point'],
       layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 7, 19, 15] } });
     h.addLayer({ id: 'vurgu-cizgi', type: 'line', source: 'vurgu', filter: ['!=', ['geometry-type'], 'Point'],
@@ -547,7 +547,7 @@ class LeafletMotoru {
       return;
     }
     L.geoJSON(ozellikler, { style: { color: '#FFFFFF', weight: 9, opacity: 0.9, fillOpacity: 0 }, interactive: false }).addTo(this.vurguKatman);
-    L.geoJSON(ozellikler, { style: { color: VURGU_RENGI, weight: 5, fillColor: VURGU_RENGI, fillOpacity: 0.5 }, interactive: false }).addTo(this.vurguKatman);
+    L.geoJSON(ozellikler, { style: { color: VURGU_RENGI, weight: 5, fillColor: VURGU_RENGI, fillOpacity: 0.1 }, interactive: false }).addTo(this.vurguKatman);
   }
 
   rotalar(liste) {
@@ -907,8 +907,8 @@ async function adresSec(r) {
 }
 
 /**
- * Secilen sokak / bina / kapi / yer: yalniz kendisi kalin turuncuyla vurgulanir ve ona yakinlasilir; mahalle / ilce taramasi
- * varsayilan cizilmez (karismasin), isteyen alan dugmeleriyle ekler.
+ * Secilen sokak / bina / kapi / yer: dis cizgisi kalin turuncuyla vurgulanir ve ona yakinlasilir; mahalle / ilce taramasi
+ * genel ve hafif (cok seffaf) olarak arkada kalir.
  */
 async function ogeVurgula(r, ham) {
   const nokta = { type: 'Point', coordinates: [r.merkez.lon, r.merkez.lat] };
@@ -925,11 +925,11 @@ async function ogeVurgula(r, ham) {
   try {
     const idari = (await api(`/v1/adres/nokta?lat=${r.merkez.lat}&lon=${r.merkez.lon}&yaricap_m=50&limit=1`)).idari;
     const kap = boyaDugmeleri(idari, null);
-    kap.querySelectorAll('button').forEach((b) => b.classList.remove('aktif'));
     kap.id = 'ara-alan-dugme';
     ham.before(kap);
+    await alanBoya(idari, durum.boyaSeviye || 'mahalle_koy');
   } catch (hata) {
-    console.warn('Alan düğmeleri kurulamadı', hata);
+    console.warn('Alan boyanamadı', hata);
   }
 }
 
