@@ -5,3 +5,5 @@ __pycache__/
 *.pmtiles
 *.osm.pbf
 .sirlar.local
+# scripts/proje-bagla.py'nin yazdigi proje anahtarlari (gizli)
+baglantilar/

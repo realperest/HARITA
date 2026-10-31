@@ -1,8 +1,63 @@
 # Entegrasyon rehberi
 
-Ortak kurallar:
+## Tek komutla baglama
+
+```bash
+HARITA_YONETIM_ANAHTARI=... python scripts/proje-bagla.py siparis       # SIPARIS / Lezzet Sepeti (hazir ayar)
+HARITA_YONETIM_ANAHTARI=... python scripts/proje-bagla.py motoconvoy    # MotoConvoy (hazir ayar)
+HARITA_YONETIM_ANAHTARI=... python scripts/proje-bagla.py yeniproje --web https://yeniproje.com [--mobil]
+```
+
+Betik her proje icin iki kayit acar ve canli servise karsi dogrular:
+
+| Kayit | Nerede kullanilir | Kaynak kisiti | Kota |
+|---|---|---|---|
+| `<ad>-sunucu` | Arka uc (FastAPI, Coolify ortam degiskeni). Tarayiciya hic gitmez | Yok (sunucudan sunucuya) | 3.000 / dk |
+| `<ad>-web` | Tarayici ve mobil uygulama (Vite derleme degiskeni) | Yalniz projenin alan adlari ve mobil kabuk kokenleri | 1.200 / dk |
+
+Anahtarlar git disi `baglantilar/<ad>.env` dosyasina projenin kullanacagi adlarla yazilir:
+
+| Degisken | Nereye |
+|---|---|
+| `HARITA_API_ADRESI`, `HARITA_SUNUCU_ANAHTARI` | Projenin backend'i (Coolify ortam degiskeni) |
+| `OSRM_ADRESI` | OSRM bekleyen kod (SIPARIS `yol_agi.py`): yalniz adres degisir |
+| `VITE_HARITA_API_ADRESI`, `VITE_HARITA_KARO_ADRESI`, `VITE_HARITA_ANAHTARI` | Frontend derlemesi (Cloudflare Pages ortam degiskeni) |
+
+Betik tekrar calistirilinca anahtar uretmez, yalniz alan adlarini ve kotayi esitler; anahtar kaybolursa `--yeni-anahtar`.
+Hazir ayarlarin alan adlari `scripts/proje-bagla.py` icindeki `HAZIR_AYARLAR`'dadir; yeni alan adi eklenince betik yeniden calistirilir.
+Projeyi gercekten baglamak, yukaridaki degiskenleri o projenin ortamina girip kodunu asagidaki uclara cevirmektir (proje bazinda ayri is).
+
+### Istemci kutuphaneleri
+
+- **Arka uc (Python):** `istemci/harita_istemci.py` dosyasini projeye kopyalayin (gereksinim `httpx==0.28.1`).
+
+```python
+from harita_istemci import HaritaIstemcisi, HaritaHatasi
+harita = HaritaIstemcisi()                     # HARITA_API_ADRESI, HARITA_SUNUCU_ANAHTARI ortamdan
+rota = await harita.rota([(40.99, 29.02), (40.98, 29.03)], profil="motosiklet")
+adres = await harita.adres_nokta(40.99, 29.02)    # pin -> adres
+talimat = await harita.adim_adim_rota([(40.99, 29.02), (40.98, 29.03)])   # Turkce navigasyon talimatlari
+```
+
+- **Tarayici (JS, derleyicisiz):** `istemci/harita-istemci.js`
+
+```js
+import { HaritaIstemcisi } from './harita-istemci.js';
+const h = new HaritaIstemcisi(import.meta.env.VITE_HARITA_API_ADRESI, import.meta.env.VITE_HARITA_ANAHTARI);
+const harita = await h.harita({ kap: 'harita', tema: 'light' });
+const rota = await h.rota([{ lat: 40.99, lon: 29.02 }, { lat: 40.98, lon: 29.03 }], 'motosiklet');
+```
+
+- **Hazir ekranlar:** `deneme/index.html` (harita, arama, rota, katmanlar) ve `deneme/navigasyon.html` (sesli adim adim navigasyon)
+  kopyalanip uyarlanabilir ornekler olarak durur.
+
+## Ortak kurallar
 - Her istek `X-Harita-Anahtar: hk_...` basligi tasir. Basligi ayarlayamayan istemciler icin yolda anahtar: `/k/<anahtar>/osrm/...`.
 - Tarayici anahtarlari projede `kaynaklar` ile kendi alan adiniza kisitlanir; sunucudan sunucuya cagrilar (Origin yok) kisitlanmaz, bu yuzden sunucu anahtarini tarayiciya vermeyin.
+- Karo sunucusu (anahtar istemez) yalniz `IZINLI_KOKEN_REGEX` kokenlerine CORS izni verir: `*.lezzetsepeti.net`, `*.motoconvoy.net`,
+  `*.89.45.45.152.sslip.io`, `localhost` ve mobil kabuklar (`https://localhost`, `capacitor://localhost`). Yeni alan adi icin Coolify'da
+  `harita` uygulamasinin bu degiskenine eklenir ve uygulama yeniden dagitilir.
+- Mobil uygulama (Capacitor / WebView) web anahtarini kullanir; TWA gibi gercek alan adindan acilan kabuklar ek ayar istemez.
 - Tum konumlar `lat`, `lon` (WGS84). Yanitlar JSON / GeoJSON.
 - Kota proje basina dakika limitidir; asilinca `429` ve `Retry-After`.
 
@@ -32,9 +87,12 @@ Ortak kurallar:
 | Arama (GeoJSON) | `GET /v1/arama`, `/v1/ters-arama` | Photon bicimli GeoJSON; kendi adres indeksimizden |
 | Yonetim | `/yonetim/*` | Proje, anahtar, izin, kaynak, kullanim |
 
-## SIPARIS
+## SIPARIS / Lezzet Sepeti
 
-- **Rota (backend):** `OSRM_ADRESI=https://HARITA-API/k/hk_.../osrm` (ic ag: gateway ic adresi). `yol_agi.py` degismez.
+Hazir: `siparis-sunucu` ve `siparis-web` kayitlari (alan adlari: `isletme`, `musteri`, kok ve `www.lezzetsepeti.net`,
+`siparis-isletme`, `siparis-musteri`, `siparis-admin` sslip adresleri, mobil kabuklar). Degerler `baglantilar/siparis.env`.
+
+- **Rota (backend):** `OSRM_ADRESI` degiskeni (`https://HARITA-API/k/hk_.../osrm`). `yol_agi.py` degismez.
 - **Harita (frontend):** Leaflet kalir; MapTiler karosu yerine `protomaps-leaflet@5.1.0` ile HARITA karosu:
   `leafletLayer({ url: '{karo}/tiles/turkiye/{z}/{x}/{y}.mvt', flavor: 'light', lang: 'tr' })`. Uydu / hibrit MapTiler'da kalir (ucretsiz kaynak yok).
 - **Adres secimi (acilir listeler):** Ilce `GET /v1/yerlesim/ara?q=&tur=ilce` (il `ust_id`), mahalle / koy `GET /v1/yerlesim/{ilce}/alt?tur=mahalle_koy`,
@@ -47,6 +105,11 @@ Ortak kurallar:
 
 ## MotoConvoy
 
+Hazir: `motoconvoy-sunucu` ve `motoconvoy-web` kayitlari (alan adlari: `motoconvoy.net`, `www`, `app`,
+`motokonus.89.45.45.152.sslip.io`, mobil kabuklar). Degerler `baglantilar/motoconvoy.env`. Backend `requests` kullaniyor;
+Python istemcisi icin `httpx==0.28.1` requirements.txt'e eklenir.
+
+- **Navigasyon:** `deneme/navigasyon.html` sesli Turkce adim adim navigasyonun calisan ornegidir (Valhalla `route`, `tr-TR`).
 - **Harita:** `tile.openstreetmap.org` yerine HARITA karosu (MapLibre onerilir: `istemci/harita-istemci.js`; Leaflet ise `protomaps-leaflet`).
 - **Rota ve varis hedefi:** `POST /v1/rota` (`"profil": "motosiklet"`), hedef arama `GET /v1/adres/ara`. OpenRouteService gunluk 2.000 istek siniri kalkar.
 - **Kalan mesafe:** Telefon rotayi bir kez ister ve kendi hesaplar (plandaki mantik degismez); sunucu yalniz rota cizgisini verir.
@@ -54,8 +117,10 @@ Ortak kurallar:
 
 ## Yeni proje
 
-1. `POST /yonetim/projeler` ile proje + anahtar (varsayilan tum servisler acik; `servisler` ile daraltilir).
-2. Web: `istemci/harita-istemci.js` veya yukaridaki REST uclari. Mobil / sunucu: anahtar sunucuda, istekler sunucudan.
+1. `python scripts/proje-bagla.py <ad> --web https://<alan-adi> [--mobil]` (elle: `POST /yonetim/projeler`; varsayilan tum servisler acik,
+   `servisler` ile daraltilir).
+2. Alan adi `IZINLI_KOKEN_REGEX` kapsaminda degilse Coolify'da eklenir (karo icin).
+3. Backend: `istemci/harita_istemci.py`; web: `istemci/harita-istemci.js` veya yukaridaki REST uclari.
 
 ## Sinirlar
 

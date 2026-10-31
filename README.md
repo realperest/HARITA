@@ -13,24 +13,33 @@ Kapsam: tum Turkiye. Veri: OpenStreetMap (c) OpenStreetMap katkicilari (ODbL).
 | `rota` | Valhalla | Rota, sure/mesafe matrisi (auto, motosiklet, bisiklet, yaya) | Hayir (ic ag) |
 | `gateway` | FastAPI | Proje anahtari, izin, kaynak kisiti, kota, kullanim sayaci, OSRM uyumlu rota | Evet (alan adi) |
 | `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlarini, sokaklari, kapi numaralarini, yerleri ve adlandirilmis binalari OSM'den yukler, aylik tazeler. Adres aramasi bu veriden yapilir (dis servis yok) | Hayir |
-| `db`, `redis` | PostGIS 17, Redis 7 | Proje / anahtar kayitlari, kota sayaclari ve yerlesim verisi | Hayir |
+| `harita-db`, `harita-redis` | PostGIS 17, Redis 7 (Coolify'in ayri kaynaklari, compose disinda) | Proje / anahtar kayitlari, adres ve yerlesim verisi, kota sayaclari | Hayir |
+| `harita-deneme` | nginx (ayri Coolify uygulamasi, `deneme/`) | Deneme haritasi, veritabani araci, navigasyon denemesi | Evet |
 
 Neden bu secimler: karolar tek dosyadir (PMTiles), sunucu CPU'su yemez, Cloudflare onbellegine uygundur ve MapTiler gibi
 ucretli/kotali dis servise ihtiyac birakmaz. Valhalla bellege eslemeli cizge kullandigi icin tum Turkiye'yi OSRM'den dusuk
 bellekle tasir ve motosiklet profili vardir.
 
-## Bir projeyi baglamak
-
-1. Yonetici anahtariyla proje olusturun (anahtar yalniz bu yanitta gorunur):
+## Bir projeyi baglamak (tek komut)
 
 ```bash
-curl -X POST https://HARITA-API/yonetim/projeler -H "X-Yonetim-Anahtari: ..." -H "Content-Type: application/json" \
-  -d '{"ad":"siparis","kaynaklar":["https://musteri.lezzetsepeti.net"],"dakika_limiti":1200}'
+HARITA_YONETIM_ANAHTARI=... python scripts/proje-bagla.py siparis          # hazir ayarli: siparis, motoconvoy
+HARITA_YONETIM_ANAHTARI=... python scripts/proje-bagla.py yeniproje --web https://yeniproje.com
 ```
 
-2. Projede `X-Harita-Anahtar: hk_...` basligiyla cagirin. Ayrintilar: [docs/ENTEGRASYON.md](docs/ENTEGRASYON.md).
-3. Izin verdiginiz baska kisiler icin de ayri proje + anahtar olusturun; anahtari istediginiz an kapatabilirsiniz
-   (`DELETE /yonetim/projeler/{id}/anahtarlar/{on_ek}`), kullanimi `GET /yonetim/projeler/{id}/kullanim` ile izlersiniz.
+Betik projeye iki anahtar acar (arka uc `<ad>-sunucu`, tarayici / mobil `<ad>-web`), anahtarlari git disi
+`baglantilar/<ad>.env` dosyasina projenin kullanacagi ortam degiskeni adlariyla yazar ve ikisini canli servise karsi dogrular.
+Projede yapilacaklar ve istemci kutuphaneleri: [docs/ENTEGRASYON.md](docs/ENTEGRASYON.md).
+Anahtari istediginiz an kapatabilirsiniz (`DELETE /yonetim/projeler/{id}/anahtarlar/{on_ek}`), kullanimi
+`GET /yonetim/projeler/{id}/kullanim` ile izlersiniz.
+
+## Canli test
+
+```bash
+HARITA_ANAHTAR=... HARITA_YONETIM_ANAHTARI=... python scripts/canli-test.py
+```
+
+Karo, rota, Valhalla, arama, adres, yerlesim, uyumlu uclar, yonetim ve deneme sayfalarini uctan uca dener (60'a yakin kontrol).
 
 ## Uclar (gateway)
 
@@ -55,7 +64,8 @@ curl -X POST https://HARITA-API/yonetim/projeler -H "X-Yonetim-Anahtari: ..." -H
 ## Yayin
 
 Coolify'a Docker Compose kaynagi olarak yayinlanir: [docs/YAYIN.md](docs/YAYIN.md). Ilk acilista veri indirmesi ve indeks uretimi
-yapilir (karo birkac GB, rota cizgesi ~20-60 dk, arama indeksi saatler); sonraki acilislar hazir veriyle baslar.
+yapilir (karo birkac GB, rota cizgesi ~20-60 dk, adres indeksi ~1 saat); sonraki acilislar hazir veriyle baslar.
+Main'e gonderim dagitimi kendiliginden baslatmaz; Coolify'da yeniden dagitim gerekir.
 
 ## Gelistirme
 
@@ -67,4 +77,5 @@ pytest   # PostgreSQL (55432) ve Redis (56379) gerekir, bkz. tests/conftest.py
 
 ## Istemci
 
-`istemci/harita-istemci.js`: MapLibre haritasi kurar, rota / matris / arama cagirir. Derleyici gerektirmez.
+- `istemci/harita-istemci.js` (tarayici): MapLibre haritasi kurar; rota, matris, arama, adres, yerlesim, Valhalla. Derleyici gerektirmez.
+- `istemci/harita_istemci.py` (arka uc, httpx): ayni uclarin asenkron Python sarmalayicisi.

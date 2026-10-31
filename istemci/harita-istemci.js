@@ -4,9 +4,12 @@
  * Kullanim (derleyicisiz, tarayicida dogrudan):
  *   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
  *   <script type="module">
- *     import { haritaOlustur, rotaIste, ara } from './harita-istemci.js';
- *     const harita = await haritaOlustur({ kap: 'harita', apiAdresi: 'https://harita-api.ornek.com', anahtar: 'hk_...' });
+ *     import { HaritaIstemcisi } from './harita-istemci.js';
+ *     const h = new HaritaIstemcisi('https://harita-api.89.45.45.152.sslip.io', 'hk_...');   // web anahtari
+ *     const harita = await h.harita({ kap: 'harita', tema: 'light' });
+ *     const rota = await h.rota([{ lat: 40.99, lon: 29.02 }, { lat: 40.98, lon: 29.03 }], 'motosiklet');
  *   </script>
+ * Tek tek fonksiyonlar da disa aciktir (haritaOlustur, rotaIste, ara, adresAra, adresNokta, valhalla ...).
  *
  * Not: anahtar tarayicida gorunur. Tarayici anahtarlarini projede yalniz kendi alan adiniza kisitlayin
  * (yonetim: PATCH /yonetim/projeler/{id} kaynaklar); sunucu tarafi anahtarlari ayri tutun.
@@ -85,6 +88,85 @@ export function ara(apiAdresi, anahtar, metin, { lat, lon, limit = 7, dil = 'tr'
 /** Koordinattan adres (GeoJSON). */
 export function tersAra(apiAdresi, anahtar, lat, lon, dil = 'tr') {
   return istek(apiAdresi, anahtar, `/v1/ters-arama?lat=${lat}&lon=${lon}&dil=${dil}`);
+}
+
+/** Bos (undefined / null) degerleri atarak sorgu metni uretir. */
+function sorgu(parametreler) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(parametreler)) if (v !== undefined && v !== null && v !== '') p.set(k, String(v));
+  return p.toString();
+}
+
+/** Kapi no, sokak, bina, yer, yerlesim aramasi. tur: kapi | sokak | bina | yer | yerlesim. */
+export function adresAra(apiAdresi, anahtar, metin, { tur, ustId, lat, lon, limit = 10 } = {}) {
+  return istek(apiAdresi, anahtar, `/v1/adres/ara?${sorgu({ q: metin, tur, ust_id: ustId, lat, lon, limit })}`);
+}
+
+/** Pin -> adres: adres metni, il / ilce / mahalle, en yakin sokak, kapi ve yerler. */
+export function adresNokta(apiAdresi, anahtar, lat, lon, yaricapM = 150) {
+  return istek(apiAdresi, anahtar, `/v1/adres/nokta?${sorgu({ lat, lon, yaricap_m: yaricapM })}`);
+}
+
+/** Acilir liste agaci: ust 'il:34', 'ilce:123', 'mahalle_koy:456', 'sokak:789'; cocuk: sokak | bina | kapi. */
+export function adresAlt(apiAdresi, anahtar, ust, { cocuk, limit = 200, atla = 0 } = {}) {
+  return istek(apiAdresi, anahtar, `/v1/adres/alt?${sorgu({ ust, cocuk, limit, atla })}`);
+}
+
+/** Il, ilce, mahalle_koy, sehir, kasaba, koy, mezra, semt aramasi. */
+export function yerlesimAra(apiAdresi, anahtar, metin, { tur, ustId, limit = 10 } = {}) {
+  return istek(apiAdresi, anahtar, `/v1/yerlesim/ara?${sorgu({ q: metin, tur, ust_id: ustId, limit })}`);
+}
+
+/** En yakin yerler (or. tur: 'akaryakit', 'eczane', 'otel'). */
+export function yakinYerler(apiAdresi, anahtar, lat, lon, { tur, yaricapM = 5000, limit = 20 } = {}) {
+  return istek(apiAdresi, anahtar, `/v1/adres/yakin?${sorgu({ lat, lon, tur, yaricap_m: yaricapM, limit })}`);
+}
+
+/** Ogenin sekli: {tur, id, ad, geometri (GeoJSON)}; il / ilce / mahalle siniri, sokak cizgisi, bina poligonu. */
+export function sekil(apiAdresi, anahtar, tur, id) {
+  return istek(apiAdresi, anahtar, `/v1/adres/sekil?${sorgu({ tur, id })}`);
+}
+
+/**
+ * Valhalla'nin tam API'si: route, optimized_route, sources_to_targets, isochrone, trace_route,
+ * trace_attributes, locate, expansion, centroid, height. Govde Valhalla bicimindedir.
+ */
+export function valhalla(apiAdresi, anahtar, uc, govde) {
+  return istek(apiAdresi, anahtar, `/valhalla/${uc}`, { method: 'POST', body: JSON.stringify(govde) });
+}
+
+/** Turkce adim adim talimatli rota (navigasyon icin). noktalar: [{lat, lon}, ...]; costing: auto | motorcycle | bicycle | pedestrian. */
+export function adimAdimRota(apiAdresi, anahtar, noktalar, costing = 'auto') {
+  return valhalla(apiAdresi, anahtar, 'route', {
+    locations: noktalar, costing, directions_options: { language: 'tr-TR', units: 'kilometers' },
+  });
+}
+
+/**
+ * Ayni adres ve anahtari tekrar yazmadan kullanmak icin sarmalayici:
+ *   const h = new HaritaIstemcisi('https://harita-api...', 'hk_...');
+ *   const harita = await h.harita({ kap: 'harita' }); const r = await h.rota([{lat, lon}, {lat, lon}]);
+ */
+export class HaritaIstemcisi {
+  constructor(apiAdresi, anahtar) {
+    this.apiAdresi = apiAdresi;
+    this.anahtar = anahtar;
+  }
+
+  harita(secenek = {}) { return haritaOlustur({ ...secenek, apiAdresi: this.apiAdresi, anahtar: this.anahtar }); }
+  yapilandirma() { return yapilandirmaAl(this.apiAdresi, this.anahtar); }
+  rota(noktalar, profil, geometri) { return rotaIste(this.apiAdresi, this.anahtar, noktalar, profil, geometri); }
+  matris(kaynaklar, hedefler, profil) { return matrisIste(this.apiAdresi, this.anahtar, kaynaklar, hedefler, profil); }
+  ara(metin, secenek) { return ara(this.apiAdresi, this.anahtar, metin, secenek); }
+  tersAra(lat, lon) { return tersAra(this.apiAdresi, this.anahtar, lat, lon); }
+  adresAra(metin, secenek) { return adresAra(this.apiAdresi, this.anahtar, metin, secenek); }
+  adresNokta(lat, lon, yaricapM) { return adresNokta(this.apiAdresi, this.anahtar, lat, lon, yaricapM); }
+  adresAlt(ust, secenek) { return adresAlt(this.apiAdresi, this.anahtar, ust, secenek); }
+  yerlesimAra(metin, secenek) { return yerlesimAra(this.apiAdresi, this.anahtar, metin, secenek); }
+  yakinYerler(lat, lon, secenek) { return yakinYerler(this.apiAdresi, this.anahtar, lat, lon, secenek); }
+  sekil(tur, id) { return sekil(this.apiAdresi, this.anahtar, tur, id); }
+  valhalla(uc, govde) { return valhalla(this.apiAdresi, this.anahtar, uc, govde); }
+  adimAdimRota(noktalar, costing) { return adimAdimRota(this.apiAdresi, this.anahtar, noktalar, costing); }
 }
 
 /** Rota cizgisini haritaya ekler (varsa gunceller). */

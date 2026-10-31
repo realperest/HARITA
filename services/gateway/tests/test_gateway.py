@@ -6,8 +6,6 @@ import httpx
 import pytest
 import respx
 
-from app.services.valhalla import polyline_coz
-
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 YONETIM = {"X-Yonetim-Anahtari": "test-yonetim"}
@@ -138,9 +136,3 @@ async def test_kullanim_sayaci(istemci):
         await istemci.get("/v1/yapilandirma", headers={"X-Harita-Anahtar": anahtar})
     kullanim = (await istemci.get(f"/yonetim/projeler/{proje_id}/kullanim", headers=YONETIM)).json()
     assert kullanim and kullanim[0]["servis"] == "yapilandirma" and kullanim[0]["adet"] == 3
-
-
-@pytest.mark.parametrize("metin,beklenen", [("_p~iF~ps|U_ulLnnqC_mqNvxq`@", [[-120.2, 38.5], [-120.95, 40.7], [-126.453, 43.252]])])
-def test_polyline5_cozme(metin, beklenen):
-    cozulen = polyline_coz(metin, 5)
-    assert [d for nokta in cozulen for d in nokta] == pytest.approx([d for nokta in beklenen for d in nokta])

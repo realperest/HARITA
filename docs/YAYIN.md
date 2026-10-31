@@ -3,11 +3,19 @@
 ## Kaynaklar
 
 1. Coolify: Yeni kaynak -> Public/Private Repository -> `realperest/HARITA` -> Build Pack: **Docker Compose**, dosya `docker-compose.yaml`.
-2. Ortam degiskenleri (`.env.example` ornek): `DB_SIFRE`, `YONETIM_ANAHTARI` (uzun rastgele), `KARO_GENEL_ADRESI`, `IZINLI_KOKEN_REGEX`.
-3. Alan adlari: `tiles` servisine karo alan adi (port 8080), `gateway` servisine API alan adi (port 8000).
+2. Ortam degiskenleri (`.env.example` ornek): `DB_SIFRE`, `REDIS_SIFRE`, `DB_ADRESI`, `REDIS_ADRESI`, `YONETIM_ANAHTARI`
+   (uzun rastgele), `KARO_GENEL_ADRESI`, `IZINLI_KOKEN_REGEX`.
+3. Veritabani ve Redis ayri Coolify kaynaklaridir (`harita-db` PostGIS 17, `harita-redis` Redis 7); compose uygulamasi
+   Coolify ortak agina baglanir ("Predefined network").
+4. Alan adlari: `tiles` servisine karo alan adi (port 8080), `gateway` servisine API alan adi (port 8000).
    Diger servisler alan adi almaz.
-4. Cloudflare: karo alan adini turuncu bulutla onbellege alin (karolar `Cache-Control: public` doner, yuk Cloudflare'de kalir).
-   SIPARIS ile ayni sunucudaysa disk (~25 GB) ve RAM (rota ~3-4 GB, arama 2-3 GB) payini once kontrol edin.
+5. Cloudflare: karo alan adini turuncu bulutla onbellege alin (karolar `Cache-Control: public` doner, yuk Cloudflare'de kalir).
+   Ayni sunucudaki diger projeler icin disk ve RAM payini kontrol edin (rota en fazla 6 GB, veri 2 GB, karo 1 GB, gateway 512 MB).
+6. Deneme sayfasi ayri Coolify uygulamasidir (`harita-deneme`, Dockerfile `deneme/`): `MAPTILER_ANAHTAR` ve `HARITA_ANAHTAR`
+   (kisitli demo anahtari) ortam degiskenleri.
+
+Gonderim (push) dagitimi kendiliginden baslatmaz: degisiklikten sonra Coolify'da ilgili kaynak yeniden dagitilir
+(`coolify deploy uuid <uuid>`; harita `cnsevlzx5utkbmcwhhsmadop`, harita-deneme `rdq3cvvcycbow0ckjl1xxnud`).
 
 ## Ilk acilis (siralama)
 
@@ -15,22 +23,20 @@
 |---|---|---|
 | tiles | Protomaps gunluk yapisindan Turkiye kesiti indirilir | dakikalar - bir saat, birkac GB |
 | rota | Geofabrik Turkiye verisinden Valhalla cizgesi uretilir | ~20-60 dk, uretim sirasinda yuksek RAM |
-| arama | Gezegen dokumunden TR indeksi uretilir | saatler (bir kereye mahsus) |
+| veri | Turkiye PBF'inden il / ilce / mahalle sinirlari, sokaklar, kapi numaralari, yerler ve binalar PostGIS'e yuklenir | ~1 saat |
 
-Hazirlik: `GET https://HARITA-API/saglik/hazir` hepsi `true` olunca 200 doner. Her servis kalici hacim kullanir; yeniden dagitimda veri silinmez.
+Hazirlik: `GET https://HARITA-API/saglik/hazir` hepsi (`veritabani`, `redis`, `rota`, `adres`) `true` olunca 200 doner.
+Her servis kalici hacim kullanir; yeniden dagitimda veri silinmez. Yayindan sonra: `python scripts/canli-test.py`.
 
 ## Veri guncelleme
 
 Aylik: `harita_karo` hacmindeki `turkiye.pmtiles` dosyasini silip tiles servisini yeniden baslatin (yeni kesit iner); rota icin
-`force_rebuild=True` ile tek seferlik yeniden baslatma; arama icin `/veri/.hazir` dosyasini silip yeniden baslatma.
-Bunu ileride zamanlanmis isle otomatiklestirmek ayri bir gelistirmedir.
+`force_rebuild=True` ile tek seferlik yeniden baslatma. Adres / yerlesim verisini `veri` servisi `GUNCELLEME_GUN` (30) gunde bir
+kendisi tazeler. Karo ve rota tazelemesini zamanlanmis isle otomatiklestirmek ayri bir gelistirmedir.
 
-## Ilk proje
+## Projeleri baglamak
 
-```bash
-curl -X POST https://HARITA-API/yonetim/projeler -H "X-Yonetim-Anahtari: $YONETIM" -H "Content-Type: application/json" \
-  -d '{"ad":"siparis","kaynaklar":["https://musteri.lezzetsepeti.net","https://isletme.lezzetsepeti.net"]}'
-```
+`python scripts/proje-bagla.py <ad>` (ayrinti: [ENTEGRASYON.md](ENTEGRASYON.md)).
 
 ## Veritabani yonetimi (Adminer)
 
