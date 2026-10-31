@@ -202,6 +202,22 @@ function ozellik(geometri) {
   return geometri ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: geometri, properties: {} }] } : BOS_KOLEKSIYON;
 }
 
+/** Karma katman: uydu uzerinde okunur olsun diye yollar acik renk, yazilar beyaz ve koyu konturlu. */
+function karmaKatmanlari() {
+  const tum = layers('harita', namedFlavor('dark'), { lang: 'tr' });
+  const cizgiler = tum
+    .filter((l) => l.type === 'line' && ['roads', 'boundaries'].includes(l['source-layer']) && !/casing|tunnel_|bridges_/.test(l.id))
+    .map((l) => ({
+      ...l,
+      paint: { ...l.paint, 'line-color': l['source-layer'] === 'boundaries' ? '#FFD166' : '#FFFFFF', 'line-opacity': 0.75 },
+    }));
+  const yazilar = tum.filter((l) => l.type === 'symbol').map((l) => ({
+    ...l,
+    paint: { ...l.paint, 'text-color': '#FFFFFF', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.6, 'text-halo-blur': 0.5 },
+  }));
+  return [...cizgiler, ...yazilar];
+}
+
 function stilKur(k) {
   const yap = durum.yap;
   const kaynaklar = {
@@ -216,7 +232,7 @@ function stilKur(k) {
     kaynaklar.zemin = { type: 'raster', tiles: [mtAdres(k)], tileSize: 512, maxzoom: 20, attribution: MT_ATIF };
     katmanlar = [{ id: 'zemin', type: 'raster', source: 'zemin' }];
     if (k.tur === 'karma') {
-      katmanlar.push(...layers('harita', namedFlavor('dark'), { lang: 'tr' }).filter((l) => l.type === 'line' || l.type === 'symbol'));
+      katmanlar.push(...karmaKatmanlari());
     }
   }
   return { version: 8, glyphs: yap.yaziTipleri, sprite: `${yap.simgeler}/${sprite}`, sources: kaynaklar, layers: katmanlar };
