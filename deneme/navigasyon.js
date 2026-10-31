@@ -450,16 +450,19 @@ function turkceSes() {
  * "Cumhuriyet Caddesi'ne", "Utangac Sokagi'nda", "Ataturk Bulvari'ndan", "Gul Sokak'a", "Istiklal Cadde'ye".
  */
 // Iyelik ekiyle biten yol turleri: ek "n" kaynastirmasiyla gelir (Caddesi'ne)
-const IYELIKLI_YOL = ['caddesi', 'sokağı', 'sokaği', 'bulvarı', 'yolu', 'otoyolu', 'meydanı', 'köprüsü', 'geçidi', 'tüneli',
-  'kavşağı', 'çıkmazı', 'yokuşu', 'parkı', 'çarşısı', 'sahili', 'kordonu', 'sokakları', 'caddeleri'];
+const IYELIKLI_YOL = ['caddesi', 'sokağı', 'sokaği', 'bulvarı', 'yolu', 'otoyolu', 'çevreyolu', 'meydanı', 'köprüsü', 'geçidi',
+  'tüneli', 'viyadüğü', 'kavşağı', 'çıkmazı', 'yokuşu', 'parkı', 'çarşısı', 'sahili', 'kordonu', 'sokakları', 'caddeleri', 'rampası'];
 // Yalin yol turleri ve kisaltmalar (kisaltma okunusu: Cd. -> Cadde, Sk. -> Sokak)
 const YALIN_YOL = { cadde: 'cadde', sokak: 'sokak', bulvar: 'bulvar', yol: 'yol', otoyol: 'otoyol', meydan: 'meydan', köprü: 'köprü',
-  geçit: 'geçit', tünel: 'tünel', kavşak: 'kavşak', çıkmaz: 'çıkmaz', yokuş: 'yokuş', 'cd.': 'cadde', 'cad.': 'cadde',
+  geçit: 'geçit', tünel: 'tünel', viyadük: 'viyadük', kavşak: 'kavşak', çıkmaz: 'çıkmaz', yokuş: 'yokuş', 'cd.': 'cadde', 'cad.': 'cadde',
   'sk.': 'sokak', 'sok.': 'sokak', 'blv.': 'bulvar', 'bulv.': 'bulvar' };
 // Yalniz yol turu kelimesinin hemen ardindan gelen genel kelime eslenir ("Cumhuriyet Caddesi" tek basina eslenmez)
 const YOL_TURU_DESENI = [...IYELIKLI_YOL, ...Object.keys(YALIN_YOL)]
   .sort((a, b) => b.length - a.length).map((k) => k.replace(/\./g, '\\.')).join('|');
-const GENEL_CADDE = new RegExp(`(?<=^|\\s)(${YOL_TURU_DESENI})\\s+cadde(si|sine|sinde|sinden|sini)(?=[\\s.,;:!?)]|$)`, 'giu');
+// Valhalla'nin ekledigi genel kelime hep kucuk harfle gelir ("caddesine"); adin kendi parcasi buyuk harfle baslar
+// ("Ankara Yolu Caddesi"). Bu yuzden genel kelime buyuk / kucuk harfe duyarli eslenir, yol turu duyarsiz.
+const YOL_TURU_DUYARSIZ = YOL_TURU_DESENI.replace(/\p{L}/gu, (h) => `[${h}${h.toLocaleUpperCase('tr-TR')}]`);
+const GENEL_CADDE = new RegExp(`(?<=^|[\\s/])(${YOL_TURU_DUYARSIZ})\\s+cadde(si|sine|sinde|sinden|sini)(?=[\\s.,;:!?)]|$)`, 'gu');
 
 function sesliEk(kelime, hal, iyelikli) {
   const unluler = [...kelime].filter((h) => 'aıoueiöü'.includes(h));
@@ -476,17 +479,30 @@ function sesliEk(kelime, hal, iyelikli) {
   return '';
 }
 
-/** Talimat metnindeki "X Caddesi caddesine" tekrarini "X Caddesi'ne" yapar; yol turu olmayan adlara dokunmaz. */
+// Yol numaralari (D260, O-4, E80): "caddesine" yerine "yoluna"
+const YOL_NUMARASI = /(?<=^|[\s/])([A-ZÇĞİÖŞÜ]{1,3}[ -]?\d{1,4}[A-Z]?)\s+cadde(si|sine|sinde|sinden|sini)(?=[\s.,;:!?)]|$)/gu;
+const YOL_NUMARASI_EKI = { si: 'yolu', sine: 'yoluna', sinde: 'yolunda', sinden: 'yolundan', sini: 'yolunu' };
+// Sira sayilari cumle ortasinda kucuk harfle ("ve İkinci çıkıştan" -> "ve ikinci çıkıştan")
+const SIRA_SAYISI = /(?<=[^.!?]\s)(Birinci|İkinci|Üçüncü|Dördüncü|Beşinci|Altıncı|Yedinci|Sekizinci|Dokuzuncu|Onuncu)(?=\s)/gu;
+
+/**
+ * Valhalla Turkce talimat metnini duzeltir: "X Caddesi caddesine" -> "X Caddesi'ne", "D260 caddesine" -> "D260 yoluna",
+ * bitisik "veİkinci" -> "ve ikinci". Yol turu olmayan adlara ve isaret metinlerine dokunmaz.
+ */
 function yolAdiDuzelt(metin) {
   if (!metin) return metin;
-  return metin.replace(GENEL_CADDE, (tam, onceki, hal) => {
-    const kucuk = onceki.toLocaleLowerCase('tr-TR');
-    const iyelikli = IYELIKLI_YOL.includes(kucuk);
-    const yalin = YALIN_YOL[kucuk];
-    if (!iyelikli && !yalin) return tam;
-    const ek = sesliEk(iyelikli ? kucuk : yalin, hal.toLocaleLowerCase('tr-TR'), iyelikli);
-    return ek ? `${onceki}'${ek}` : onceki;
-  });
+  return metin
+    .replace(/(?<=\s|^)ve(?=[A-ZÇĞİÖŞÜ])/gu, 've ')
+    .replace(GENEL_CADDE, (tam, onceki, hal) => {
+      const kucuk = onceki.toLocaleLowerCase('tr-TR');
+      const iyelikli = IYELIKLI_YOL.includes(kucuk);
+      const yalin = YALIN_YOL[kucuk];
+      if (!iyelikli && !yalin) return tam;
+      const ek = sesliEk(iyelikli ? kucuk : yalin, hal.toLocaleLowerCase('tr-TR'), iyelikli);
+      return ek ? `${onceki}'${ek}` : onceki;
+    })
+    .replace(YOL_NUMARASI, (tam, numara, hal) => `${numara} ${YOL_NUMARASI_EKI[hal.toLocaleLowerCase('tr-TR')]}`)
+    .replace(SIRA_SAYISI, (sira) => sira.toLocaleLowerCase('tr-TR'));
 }
 
 function soyle(metin, oncelikli = false) {
