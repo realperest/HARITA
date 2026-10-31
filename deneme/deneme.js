@@ -24,7 +24,7 @@ const KATMANLAR = [
   { kod: 'v-white', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - beyaz', tur: 'vektor', tema: 'white' },
   { kod: 'v-grayscale', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - gri', tur: 'vektor', tema: 'grayscale' },
   { kod: 'v-black', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - siyah', tur: 'vektor', tema: 'black' },
-  { kod: 'mt-hybrid', grup: 'MapTiler (SIPARIS ile aynı)', ad: 'Hibrit', tur: 'mt', harita: 'hybrid', uzanti: 'jpg' },
+  { kod: 'mt-hybrid', grup: 'MapTiler (SIPARIS ile aynı)', ad: 'Hibrit', tur: 'mt', harita: 'hybrid-v4', uzanti: 'jpg' },
   { kod: 'mt-satellite', grup: 'MapTiler (SIPARIS ile aynı)', ad: 'Uydu', tur: 'mt', harita: 'satellite', uzanti: 'jpg' },
   { kod: 'mt-streets', grup: 'MapTiler (SIPARIS ile aynı)', ad: 'Sokak', tur: 'mt', harita: 'streets-v2', uzanti: 'png' },
   { kod: 'mt-osm', grup: 'MapTiler (SIPARIS ile aynı)', ad: 'Ayrıntılı', tur: 'mt', harita: 'openstreetmap', uzanti: 'png' },
