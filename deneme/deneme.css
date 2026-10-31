@@ -252,3 +252,6 @@ body {
   .harita-kap { grid-row: 1; }
   .okuma { display: none; }
 }
+
+/* Leaflet "Konum" dugmesi */
+.leaflet-bar a.konum-dugmesi { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }

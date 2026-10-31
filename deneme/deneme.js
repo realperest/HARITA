@@ -209,7 +209,7 @@ function karmaKatmanlari() {
     .filter((l) => l.type === 'line' && ['roads', 'boundaries'].includes(l['source-layer']) && !/casing|tunnel_|bridges_/.test(l.id))
     .map((l) => ({
       ...l,
-      paint: { ...l.paint, 'line-color': l['source-layer'] === 'boundaries' ? '#FFD166' : '#FFFFFF', 'line-opacity': 0.75 },
+      paint: { ...l.paint, 'line-color': l['source-layer'] === 'boundaries' ? '#FFD166' : '#FFFFFF', 'line-opacity': /roads_(other|minor_service|link)/.test(l.id) ? 0.3 : 0.8 },
     }));
   const yazilar = tum.filter((l) => l.type === 'symbol').map((l) => ({
     ...l,
@@ -248,6 +248,9 @@ class MapLibreMotoru {
       zoom: goruntu.zoom,
     });
     this.h.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-left');
+    this.h.addControl(new maplibregl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 17 },
+    }), 'top-left');
     this.h.on('style.load', () => this.kaplamaKur());
     this.h.on('click', (e) => cb.tikla({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
     this.h.on('mousemove', (e) => cb.imlec({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
@@ -367,6 +370,7 @@ class LeafletMotoru {
     this.yakinKatman = L.layerGroup().addTo(this.h);
     this.isaretKatman = L.layerGroup().addTo(this.h);
     this.katmanDegistir(katman);
+    this.konumDugmesi();
     this.h.on('click', (e) => cb.tikla({ lat: e.latlng.lat, lng: e.latlng.lng }));
     this.h.on('mousemove', (e) => cb.imlec({ lat: e.latlng.lat, lng: e.latlng.lng }));
     this.h.on('move', () => cb.goruntu(this.goruntu()));
@@ -377,6 +381,29 @@ class LeafletMotoru {
     this.yakin(veri.yakin);
     this.yerler(veri.yerler);
     this.izokron(veri.izokron);
+  }
+
+  /** "Konumumu bul" dugmesi: tarayici konumuna gider ve dogruluk dairesini cizer. */
+  konumDugmesi() {
+    const L = window.L;
+    const Denetim = L.Control.extend({
+      onAdd: () => {
+        const kutu = L.DomUtil.create('div', 'leaflet-bar');
+        const dugme = L.DomUtil.create('a', 'konum-dugmesi', kutu);
+        dugme.href = '#';
+        dugme.title = 'Konumumu bul';
+        dugme.textContent = 'Konum';
+        L.DomEvent.disableClickPropagation(kutu);
+        L.DomEvent.on(dugme, 'click', (e) => { L.DomEvent.preventDefault(e); this.h.locate({ setView: true, maxZoom: 18, enableHighAccuracy: true }); });
+        return kutu;
+      },
+    });
+    new Denetim({ position: 'topleft' }).addTo(this.h);
+    this.h.on('locationfound', (e) => {
+      this.konumIsareti?.remove();
+      this.konumIsareti = L.circle(e.latlng, { radius: e.accuracy, color: '#58A6FF', weight: 1, fillOpacity: 0.12 }).addTo(this.h);
+    });
+    this.h.on('locationerror', () => mesaj('baglanti-mesaj', 'Konum alınamadı; tarayıcıda konum iznini kontrol edin.', 'uyari'));
   }
 
   katmanDegistir(k) {
