@@ -3,6 +3,8 @@
 Okumada DOCTYPE / ENTITY iceren dosyalar reddedilir (XML varlik genisletme saldirilarina karsi).
 """
 
+import bisect
+import math
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
@@ -90,3 +92,47 @@ def oku(metin: str) -> dict:
     if not sayac:
         raise GpxHatasi("GPX dosyasinda nokta yok.")
     return {"ad": ad[:200] if ad else None, "yol_noktalari": wpt, "rotalar": [r for r in rotalar if r], "izler": [i for i in izler if i]}
+
+
+def _metre(a: dict, b: dict) -> float:
+    """Iki nokta arasi metre (haversine)."""
+    f1, f2 = math.radians(a["lat"]), math.radians(b["lat"])
+    h = math.sin((f2 - f1) / 2) ** 2 + math.cos(f1) * math.cos(f2) * math.sin(math.radians(b["lon"] - a["lon"]) / 2) ** 2
+    return 2 * 6371008.8 * math.asin(math.sqrt(h))
+
+
+def iz_takip(duraklar: list[dict], iz: list[dict], maks_ara: int, aralik_m: float = 2000) -> list[dict]:
+    """Duraklara izden ara (gecis) noktalari ekler: rota hesaplanirken bu noktalardan gecilir, boylece navigasyon izin yollarini izler.
+    Her ara nokta izde kendisinden sonra gelen durağin "ara" listesine konur. Ilk durak baslangic sayilir (ara almaz).
+    Ara nokta sayisi en fazla maks_ara; aralik izin uzunluguna gore buyur."""
+    if len(iz) < 3 or len(duraklar) < 2 or maks_ara <= 0:
+        return duraklar
+    # Uzun izde hesap yukunu sinirlamak icin seyreltilir (en fazla ~5.000 nokta)
+    adim_n = max(1, len(iz) // 5000)
+    iz = iz[::adim_n] + ([iz[-1]] if (len(iz) - 1) % adim_n else [])
+    kum = [0.0]
+    for i in range(1, len(iz)):
+        kum.append(kum[-1] + _metre(iz[i - 1], iz[i]))
+    # Duraklarin izdeki sirasi (geri gitmeyen en yakin nokta)
+    indeksler, bas = [], 0
+    for d in duraklar:
+        en = min(range(bas, len(iz)), key=lambda i: _metre(d, iz[i]), default=bas)
+        indeksler.append(en)
+        bas = en
+    toplam = kum[-1]
+    adet = min(maks_ara, int(toplam // aralik_m))
+    if adet <= 0:
+        return duraklar
+    adim = toplam / (adet + 1)
+    durak_m = [kum[i] for i in indeksler]
+    sonuc = [{**d, "ara": []} for d in duraklar]
+    for k in range(1, adet + 1):
+        hedef = k * adim
+        i = min(bisect.bisect_left(kum, hedef), len(iz) - 1)
+        # Duraga cok yakin ara nokta gereksizdir
+        if any(abs(kum[i] - m) < 200 for m in durak_m):
+            continue
+        sira = next((j for j, di in enumerate(indeksler) if j > 0 and di >= i), None)
+        if sira is not None:
+            sonuc[sira]["ara"].append({"lat": iz[i]["lat"], "lon": iz[i]["lon"]})
+    return sonuc

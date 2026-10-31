@@ -298,3 +298,18 @@ async def test_cevrimdisi_paketler(istemci):
     await cache.istemci().delete("cevrimdisi:liste:json")
     respx.get("http://tiles:8080/paket/liste.json").mock(return_value=httpx.Response(404))
     assert (await istemci.get("/v1/cevrimdisi/paketler", headers=b)).status_code == 503
+
+
+async def test_gpx_izi_takip(istemci):
+    b = await baslik(istemci)
+    # ~22 km'lik L bicimli iz: once dogu, sonra kuzey; durak yok
+    noktalar = [(41.0, 29.0 + i * 0.01) for i in range(13)] + [(41.0 + i * 0.01, 29.12) for i in range(1, 11)]
+    iz = "".join(f'<trkpt lat="{a}" lon="{o}"/>' for a, o in noktalar)
+    metin = f'<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>{iz}</trkseg></trk></gpx>'
+    duz = (await istemci.post("/v1/gpx/oku", headers=b, content=metin.encode())).json()
+    assert len(duz["duraklar"]) == 2 and "ara" not in duz["duraklar"][1]
+    takip = (await istemci.post("/v1/gpx/oku?iz_takip=true", headers=b, content=metin.encode())).json()
+    ara = takip["duraklar"][1]["ara"]
+    assert 8 <= len(ara) <= 11 and takip["duraklar"][0]["ara"] == []
+    # Ara noktalar izin uzerinde ve sirali: once dogu kolu, sonra kuzey kolu
+    assert ara[0]["lat"] == 41.0 and ara[-1]["lon"] == 29.12

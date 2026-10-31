@@ -337,7 +337,9 @@ async function rotaIste(baslangic, duraklar, ilkDurak = 0) {
   const v = await api('/valhalla/route', {
     method: 'POST',
     body: JSON.stringify({
-      locations: [bas, ...duraklar.map((d) => ({ lat: d.lat, lon: d.lon }))],
+      // Ara (gecis) noktalari: GPX izinin yollarindan gecmek icin; "through" bacak bolmez, duraga ulasildi denmez
+      locations: [bas, ...duraklar.flatMap((d) => [...(d.ara || []).map((a) => ({ lat: a.lat, lon: a.lon, type: 'through' })),
+        { lat: d.lat, lon: d.lon }])],
       costing: COSTING[durum.profil],
       directions_options: { language: 'tr-TR', units: 'kilometers' },
     }),
@@ -346,8 +348,16 @@ async function rotaIste(baslangic, duraklar, ilkDurak = 0) {
 }
 
 /** Henuz ulasilmamis duraklar (yeniden rota ve baslangic icin). */
-function kalanDuraklar() {
-  return durum.duraklar.slice(durum.gecilenDurak);
+function kalanDuraklar(konum = null) {
+  const kalan = durum.duraklar.slice(durum.gecilenDurak);
+  const ilk = kalan[0];
+  if (!konum || !ilk?.ara?.length) return kalan;
+  // Yeniden rotada gecilmis ara noktalara geri donulmez: konuma en yakin ara noktadan sonrakiler tutulur
+  const p = [konum.lon, konum.lat];
+  let en = 0;
+  ilk.ara.forEach((a, i) => { if (mesafeM(p, [a.lon, a.lat]) < mesafeM(p, [ilk.ara[en].lon, ilk.ara[en].lat])) en = i; });
+  const yakin = mesafeM(p, [ilk.ara[en].lon, ilk.ara[en].lat]) < 150;
+  return [{ ...ilk, ara: ilk.ara.slice(en + (yakin ? 1 : 0)) }, ...kalan.slice(1)];
 }
 
 /** Duraklari haritaya numarali isaret olarak cizer (son durak hedef rengiyle). */
@@ -934,7 +944,7 @@ async function yenidenRota(k) {
   manevraKartiMesaj('Yeni rota', 'Rota yeniden hesaplanıyor...');
   soyle('Rota yeniden hesaplanıyor.', true);
   try {
-    const yeni = await rotaIste(k, kalanDuraklar(), durum.gecilenDurak);
+    const yeni = await rotaIste(k, kalanDuraklar(k), durum.gecilenDurak);
     if (durum.mod !== 'nav') return;
     rotaAyarla(yeni);
     durum.sapmaSayac = 0;
@@ -1007,6 +1017,48 @@ function duraklarListesiYaz() {
   });
   $('paylas').hidden = !durum.duraklar.length;
   $('gpx-indir').hidden = !durum.duraklar.length;
+  $('google-ac').hidden = !durum.duraklar.length;
+  $('yandex-ac').hidden = !durum.duraklar.length;
+}
+
+/**
+ * Dis navigasyon icin nokta listesi: tum duraklar zorunlu, kalan yer GPX ara noktalariyla (sira korunarak, esit aralikla) doldurulur.
+ * Donus: {noktalar, eksik} (eksik: sigmayan durak var mi).
+ */
+function disNoktalar(enFazla) {
+  const duraklar = durum.duraklar.slice(durum.gecilenDurak);
+  const tum = duraklar.flatMap((d, di) => [...(d.ara || []).map((a) => ({ ...a, ara: true, di })), { lat: d.lat, lon: d.lon, di }]);
+  const durakSay = duraklar.length;
+  if (durakSay > enFazla) return { noktalar: duraklar.slice(0, enFazla), eksik: true };
+  const araListe = tum.filter((n) => n.ara);
+  const yer = enFazla - durakSay;
+  const secilen = new Set(yer > 0 && araListe.length
+    ? Array.from({ length: Math.min(yer, araListe.length) }, (_, k) => araListe[Math.floor(((k + 0.5) * araListe.length) / Math.min(yer, araListe.length))])
+    : []);
+  return { noktalar: tum.filter((n) => !n.ara || secilen.has(n)), eksik: false };
+}
+
+const ciftYaz = (n) => `${n.lat.toFixed(6)},${n.lon.toFixed(6)}`;
+
+/** Rotayi Google Haritalar'da acar (telefonda Google Haritalar uygulamasi). Google en fazla 9 ara nokta kabul eder. */
+function googleAc() {
+  const { noktalar, eksik } = disNoktalar(10);
+  const hedef = noktalar.at(-1);
+  const p = new URLSearchParams({ api: '1', destination: ciftYaz(hedef),
+    travelmode: { araba: 'driving', motosiklet: 'two-wheeler', yaya: 'walking' }[durum.profil] || 'driving' });
+  if (durum.konum) p.set('origin', ciftYaz(durum.konum));
+  if (noktalar.length > 1) p.set('waypoints', noktalar.slice(0, -1).map(ciftYaz).join('|'));
+  window.open(`https://www.google.com/maps/dir/?${p}`, '_blank', 'noopener');
+  if (eksik) planMesaj('Google en fazla 10 nokta kabul ediyor; ilk 10 durak gönderildi.', 'uyari');
+}
+
+/** Rotayi Yandex Haritalar / Navigasyon'da acar; baslangic bos birakilirsa Yandex anlik konumu kullanir. */
+function yandexAc() {
+  const { noktalar, eksik } = disNoktalar(20);
+  const rtext = [durum.konum ? ciftYaz(durum.konum) : '', ...noktalar.map(ciftYaz)].join('~');
+  const p = new URLSearchParams({ rtext, rtt: durum.profil === 'yaya' ? 'pd' : 'auto' });
+  window.open(`https://yandex.com.tr/maps/?${p}`, '_blank', 'noopener');
+  if (eksik) planMesaj("Yandex'e ilk 20 durak gönderildi.", 'uyari');
 }
 
 /** Duraklari ve profili paylasim koduyla paylasir; baglanti panoya kopyalanir (destekleniyorsa paylasim penceresi acilir). */
@@ -1014,7 +1066,7 @@ async function rotaPaylas() {
   try {
     const v = await api('/v1/paylasim', {
       method: 'POST',
-      body: JSON.stringify({ profil: durum.profil, duraklar: durum.duraklar.map(({ lat, lon, ad }) => ({ lat, lon, ad })) }),
+      body: JSON.stringify({ profil: durum.profil, duraklar: durum.duraklar.map(({ lat, lon, ad, ara }) => ({ lat, lon, ad, ara })) }),
     });
     const adres = `${location.origin}${location.pathname}?kod=${v.kod}`;
     if (navigator.share) {
@@ -1052,10 +1104,11 @@ async function gpxIndir() {
 async function gpxYukle(dosya) {
   if (!dosya) return;
   try {
-    const v = await api('/v1/gpx/oku', { method: 'POST', body: await dosya.text() });
+    const v = await api(`/v1/gpx/oku?iz_takip=${$('iz-takip').checked}`, { method: 'POST', body: await dosya.text() });
     duraklariYukle(v.duraklar);
     await onizlemeHesapla();
-    planMesaj(`${v.duraklar.length} durak GPX dosyasından yüklendi.`, 'basari');
+    const ara = v.duraklar.reduce((t, d) => t + (d.ara?.length || 0), 0);
+    planMesaj(`${v.duraklar.length} durak GPX dosyasından yüklendi${ara ? `; rota izin yollarını ${ara} ara noktayla takip ediyor` : ''}.`, 'basari');
   } catch (hata) {
     console.warn('GPX okunamadı', hata);
     planMesaj(hata instanceof HataMesaji ? hata.message : 'GPX dosyası okunamadı.', 'hata');
@@ -1064,7 +1117,10 @@ async function gpxYukle(dosya) {
 
 /** Disaridan gelen noktalari durak listesi yapar (adi olmayana sira adi verilir). */
 function duraklariYukle(noktalar, adlar = []) {
-  durum.duraklar = noktalar.map((n, i) => ({ lat: n.lat, lon: n.lon, ad: n.ad || adlar[i] || (i === noktalar.length - 1 ? 'Hedef' : `${i + 1}. durak`) }));
+  durum.duraklar = noktalar.map((n, i) => ({
+    lat: n.lat, lon: n.lon, ad: n.ad || adlar[i] || (i === noktalar.length - 1 ? 'Hedef' : `${i + 1}. durak`),
+    ...(n.ara?.length ? { ara: n.ara } : {}),
+  }));
   durum.gecilenDurak = 0;
   durum.hedef = durum.duraklar.at(-1);
   duraklariCiz();
@@ -1341,6 +1397,8 @@ function olaylariBagla() {
   });
   $('paylas').addEventListener('click', rotaPaylas);
   $('gpx-indir').addEventListener('click', gpxIndir);
+  $('google-ac').addEventListener('click', googleAc);
+  $('yandex-ac').addEventListener('click', yandexAc);
   $('gpx-yukle').addEventListener('change', (olay) => { gpxYukle(olay.target.files[0]); olay.target.value = ''; });
   $('konumum').addEventListener('click', () => {
     durum.ilkKonum = true;
