@@ -90,7 +90,7 @@ const durum = {
   izleme: null,
   ekranKilidi: null,
   ilkKonum: true,
-  cizim: { 'rota-tum': BOS, 'rota-kalan': BOS, hedef: BOS, 'manevra-nokta': BOS },
+  cizim: { 'rota-tum': BOS, 'rota-kalan': BOS, hedef: BOS, 'manevra-nokta': BOS, uyari: BOS },
 };
 const simDurum = { d: 0, sapma: 0, sapmaAdim: 0, zamanlayici: null };
 let harita = null;
@@ -136,6 +136,11 @@ function sureYaz(sn) {
   const dk = Math.max(0, Math.round(sn / 60));
   if (dk < 60) return `${sayi(dk)} dk`;
   return `${sayi(Math.floor(dk / 60))} sa ${sayi(dk % 60)} dk`;
+}
+
+/** GG.AA.YYYY SS:DD */
+function tarihSaatYaz(tarih) {
+  return `${tarih.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${saatYaz(tarih)}`;
 }
 
 function saatYaz(tarih) {
@@ -366,6 +371,54 @@ function rotaAyarla(rota) {
   veriYaz('rota-tum', cizgi(rota.koord));
   veriYaz('rota-kalan', cizgi(rota.koord));
   veriYaz('manevra-nokta', BOS);
+  veriYaz('uyari', BOS);
+  uyarilariGetir(rota);
+}
+
+/** Rota boyunca gonderilecek en fazla nokta (uzun rotada aradaki noktalar seyreltilir). */
+const UYARI_MAKS_NOKTA = 20000;
+
+/**
+ * Rota boyunca hiz kamerasi ve hiz kesicileri getirir (rota_m: rota basindan uzaklik) ve haritaya cizer.
+ * Hata olursa navigasyon uyarisiz devam eder.
+ */
+async function uyarilariGetir(rota) {
+  const adim = Math.ceil(rota.koord.length / UYARI_MAKS_NOKTA);
+  const noktalar = rota.koord.filter((_, i) => i % adim === 0 || i === rota.koord.length - 1).map(([lon, lat]) => [lat, lon]);
+  try {
+    const v = await api('/v1/yol/uyarilar', { method: 'POST', body: JSON.stringify({ noktalar, tampon_m: 25 }) });
+    if (durum.rota !== rota) return;
+    rota.uyarilar = v.uyarilar || [];
+    rota.uyariSoylendi = new Set();
+    veriYaz('uyari', {
+      type: 'FeatureCollection',
+      features: rota.uyarilar.map((u) => ({
+        type: 'Feature', geometry: { type: 'Point', coordinates: [u.lon, u.lat] },
+        properties: { kamera: u.tur === 'hiz_kamerasi', hiz: u.hiz_siniri_kmh ? String(u.hiz_siniri_kmh) : '' },
+      })),
+    });
+  } catch (hata) {
+    console.warn('Yol uyarıları alınamadı', hata);
+  }
+}
+
+/** Ondeki hiz kamerasi (hiza gore 300-700 m) ve hiz kesici (120-250 m) icin bir kez sesli uyari. */
+function sesliUyarilar(rota, ilerleme, hizMs) {
+  if (!rota.uyarilar?.length || durum.profil === 'yaya') return;
+  const v = Math.max(hizMs || 0, 8);
+  for (const u of rota.uyarilar) {
+    const kalan = u.rota_m - ilerleme;
+    if (kalan < -20) continue;
+    const kamera = u.tur === 'hiz_kamerasi';
+    const esik = kamera ? Math.min(700, Math.max(300, v * 25)) : Math.min(250, Math.max(120, v * 10));
+    if (kalan > 700) break;
+    if (kalan > esik) continue;
+    if (rota.uyariSoylendi.has(u.id) || kalan < 0) continue;
+    rota.uyariSoylendi.add(u.id);
+    soyle(kamera
+      ? `${sesliMesafe(kalan)} sonra hız kamerası${u.hiz_siniri_kmh ? `, hız sınırı ${u.hiz_siniri_kmh}` : ''}.`
+      : 'Dikkat, ileride hız kesici var.');
+  }
 }
 
 /** Son bilinen parcadan sonra bu kadar metrelik rota parcasinda eslesme aranir. */
@@ -630,6 +683,16 @@ function kaplamaKur() {
   kat({ id: 'manevra-nokta', type: 'circle', source: 'manevra-nokta',
     paint: { 'circle-radius': 6, 'circle-color': '#FFFFFF', 'circle-stroke-color': '#58A6FF', 'circle-stroke-width': 3 } });
   // Duraklar: son durak (hedef) kirmizi, ara duraklar turuncu, gecilenler gri; ustunde sira numarasi
+  // Hiz kamerasi kirmizi, hiz kesici turuncu; kameranin hiz siniri ustunde yazar
+  kat({ id: 'uyari', type: 'circle', source: 'uyari', minzoom: 11,
+    paint: {
+      'circle-radius': ['case', ['get', 'kamera'], 8, 5],
+      'circle-color': ['case', ['get', 'kamera'], '#F85149', '#D29922'],
+      'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2,
+    } });
+  kat({ id: 'uyari-hiz', type: 'symbol', source: 'uyari', minzoom: 13,
+    layout: { 'text-field': ['get', 'hiz'], 'text-font': ['Noto Sans Medium'], 'text-size': 9, 'text-allow-overlap': true },
+    paint: { 'text-color': '#FFFFFF' } });
   kat({ id: 'hedef', type: 'circle', source: 'hedef',
     paint: {
       'circle-radius': ['case', ['get', 'son'], 10, 9],
@@ -831,6 +894,7 @@ function konumGeldi(k) {
   }
   if (!durum.yenidenRotaSuruyor) manevraKartiYaz(rota, i, manevraM);
   if (yolda) sesliYonlendir(rota, i, manevraM, k.hiz);
+  if (yolda) sesliUyarilar(rota, o.ilerleme, k.hiz);
   ozetYaz(kalanSure(rota, o.ilerleme), kalanM, k.hiz);
   kameraGuncelle(gosterilen, yon, k.hiz);
 }
@@ -941,6 +1005,70 @@ function duraklarListesiYaz() {
     const son = i === durum.duraklar.length - 1;
     liste.append(el('li', {}, el('span', { sinif: 'durak-no', metin: son ? 'Hedef' : `${i + 1}.` }), el('span', { sinif: 'durak-ad', metin: d.ad }), sil));
   });
+  $('paylas').hidden = !durum.duraklar.length;
+  $('gpx-indir').hidden = !durum.duraklar.length;
+}
+
+/** Duraklari ve profili paylasim koduyla paylasir; baglanti panoya kopyalanir (destekleniyorsa paylasim penceresi acilir). */
+async function rotaPaylas() {
+  try {
+    const v = await api('/v1/paylasim', {
+      method: 'POST',
+      body: JSON.stringify({ profil: durum.profil, duraklar: durum.duraklar.map(({ lat, lon, ad }) => ({ lat, lon, ad })) }),
+    });
+    const adres = `${location.origin}${location.pathname}?kod=${v.kod}`;
+    if (navigator.share) {
+      await navigator.share({ title: 'Rota', text: `Rota kodu: ${v.kod}`, url: adres });
+    } else {
+      await navigator.clipboard.writeText(adres);
+    }
+    planMesaj(`Paylaşım kodu ${v.kod} (bağlantı kopyalandı, ${tarihSaatYaz(new Date(v.bitis))} tarihine kadar geçerli).`, 'basari');
+  } catch (hata) {
+    if (hata?.name === 'AbortError') return;
+    console.warn('Paylaşım başarısız', hata);
+    planMesaj(hata instanceof HataMesaji ? hata.message : 'Paylaşım oluşturulamadı.', 'hata');
+  }
+}
+
+/** Duraklari ve (varsa) hesaplanan rota cizgisini GPX dosyasi olarak indirir. */
+async function gpxIndir() {
+  const govde = { ad: durum.duraklar.at(-1)?.ad || 'Rota', duraklar: durum.duraklar.map(({ lat, lon, ad }) => ({ lat, lon, ad })) };
+  if (durum.rota) govde.noktalar = durum.rota.koord.map(([lon, lat]) => [lat, lon]);
+  try {
+    const yanit = await fetch(`${durum.api.replace(/\/$/, '')}/v1/gpx/olustur`, {
+      method: 'POST', headers: { 'X-Harita-Anahtar': durum.anahtar, 'Content-Type': 'application/json' }, body: JSON.stringify(govde),
+    });
+    if (!yanit.ok) throw new HataMesaji(HATA_METNI[yanit.status] || 'GPX oluşturulamadı.', yanit.status);
+    const baglanti = el('a', { href: URL.createObjectURL(await yanit.blob()), download: 'rota.gpx' });
+    baglanti.click();
+    setTimeout(() => URL.revokeObjectURL(baglanti.href), 1000);
+  } catch (hata) {
+    console.warn('GPX indirilemedi', hata);
+    planMesaj(hata instanceof HataMesaji ? hata.message : 'GPX oluşturulamadı.', 'hata');
+  }
+}
+
+/** Secilen GPX dosyasindaki duraklari (yol noktalari, rota ya da izin basi / sonu) yukler ve onizler. */
+async function gpxYukle(dosya) {
+  if (!dosya) return;
+  try {
+    const v = await api('/v1/gpx/oku', { method: 'POST', body: await dosya.text() });
+    duraklariYukle(v.duraklar);
+    await onizlemeHesapla();
+    planMesaj(`${v.duraklar.length} durak GPX dosyasından yüklendi.`, 'basari');
+  } catch (hata) {
+    console.warn('GPX okunamadı', hata);
+    planMesaj(hata instanceof HataMesaji ? hata.message : 'GPX dosyası okunamadı.', 'hata');
+  }
+}
+
+/** Disaridan gelen noktalari durak listesi yapar (adi olmayana sira adi verilir). */
+function duraklariYukle(noktalar, adlar = []) {
+  durum.duraklar = noktalar.map((n, i) => ({ lat: n.lat, lon: n.lon, ad: n.ad || adlar[i] || (i === noktalar.length - 1 ? 'Hedef' : `${i + 1}. durak`) }));
+  durum.gecilenDurak = 0;
+  durum.hedef = durum.duraklar.at(-1);
+  duraklariCiz();
+  duraklarListesiYaz();
 }
 
 async function durakSil(i) {
@@ -976,13 +1104,43 @@ async function onizlemeHesapla() {
     arayuzGuncelle();
     ozetYaz(rota.sure, rota.toplam, durum.konum?.hiz);
     rotayaSigdir(rota);
+    havaGoster(rota);
   } catch (hata) {
     console.warn('Rota alınamadı', hata);
     planMesaj(hata instanceof HataMesaji ? hata.message : 'Rota alınamadı.', 'hata');
   }
 }
 
+const HAVA_UYARI_METNI = {
+  firtina: 'fırtına', kar: 'kar', buzlanma: 'buzlanma', kuvvetli_yagis: 'kuvvetli yağış', kuvvetli_ruzgar: 'kuvvetli rüzgar', sis: 'sis',
+};
+
+/** Onizlenen rota boyunca varis saatindeki havayi ozetler: sicaklik araligi, ilk uyarinin yeri. Hata olursa gizli kalir. */
+async function havaGoster(rota) {
+  const alan = $('hava');
+  alan.hidden = true;
+  const adim = Math.ceil(rota.koord.length / 5000);
+  const noktalar = rota.koord.filter((_, i) => i % adim === 0 || i === rota.koord.length - 1).map(([lon, lat]) => [lat, lon]);
+  try {
+    const v = await api('/v1/yol/hava', { method: 'POST', body: JSON.stringify({ noktalar, sure_sn: rota.sure }) });
+    if (durum.rota !== rota) return;
+    const tahminli = v.noktalar.filter((n) => n.tahmin_var && n.sicaklik_c !== null);
+    if (!tahminli.length) return;
+    const sicak = tahminli.map((n) => n.sicaklik_c);
+    const [enAz, enCok] = [Math.round(Math.min(...sicak)), Math.round(Math.max(...sicak))];
+    const ilk = tahminli.find((n) => n.uyarilar.length);
+    let metin = `Yol boyunca hava: ${enAz === enCok ? enAz : `${enAz} / ${enCok}`} °C, ${tahminli[0].durum || ''}`.trim();
+    if (ilk) metin += `. Dikkat: ${ilk.uyarilar.map((u) => HAVA_UYARI_METNI[u] || u).join(', ')} (${mesafeYaz(ilk.rota_m)} sonra, ${saatYaz(new Date(ilk.varis))})`;
+    alan.textContent = `${metin}.`;
+    alan.classList.toggle('uyari-var', Boolean(ilk));
+    alan.hidden = false;
+  } catch (hata) {
+    console.warn('Hava durumu alınamadı', hata);
+  }
+}
+
 function hedefTemizle() {
+  $('hava').hidden = true;
   Object.assign(durum, { hedef: null, duraklar: [], gecilenDurak: 0, durakEkle: false, rota: null, mod: 'plan' });
   for (const ad of Object.keys(durum.cizim)) veriYaz(ad, BOS);
   $('hedef-ara').value = '';
@@ -1181,6 +1339,9 @@ function olaylariBagla() {
     durum.simHiz = Number(o.target.value);
     ayarKaydet();
   });
+  $('paylas').addEventListener('click', rotaPaylas);
+  $('gpx-indir').addEventListener('click', gpxIndir);
+  $('gpx-yukle').addEventListener('change', (olay) => { gpxYukle(olay.target.files[0]); olay.target.value = ''; });
   $('konumum').addEventListener('click', () => {
     durum.ilkKonum = true;
     if (durum.konum) harita.flyTo({ center: [durum.konum.lon, durum.konum.lat], zoom: 15, duration: 800 });
@@ -1311,6 +1472,19 @@ async function baglantidanAc() {
   if (ham) {
     noktalar = ham.split(';').map((s) => s.split(',').map(Number)).filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b)
       && Math.abs(a) <= 90 && Math.abs(b) <= 180).map(([lat, lon]) => ({ lat, lon }));
+  } else if (/^[A-Za-z0-9]{8}$/.test(p.get('kod') || '')) {
+    try {
+      const v = await api(`/v1/paylasim/${p.get('kod')}`);
+      noktalar = v.duraklar;
+      if (COSTING[v.profil]) {
+        durum.profil = v.profil;
+        $('profil').value = v.profil;
+      }
+    } catch (hata) {
+      console.warn('Paylasim kodu acilamadi', hata);
+      planMesaj(hata?.kod === 404 ? 'Paylaşım bulunamadı ya da süresi doldu.' : 'Paylaşım açılamadı.', 'hata');
+      return;
+    }
   } else if (p.get('baglanti')) {
     try {
       noktalar = (await api(`/v1/baglanti/coz?adres=${encodeURIComponent(p.get('baglanti'))}`)).noktalar;
@@ -1323,10 +1497,7 @@ async function baglantidanAc() {
     }
   }
   if (!noktalar.length) return;
-  durum.duraklar = noktalar.map((n, i) => ({ ...n, ad: adlar[i] || (i === noktalar.length - 1 ? 'Hedef' : `${i + 1}. durak`) }));
-  durum.hedef = durum.duraklar.at(-1);
-  duraklariCiz();
-  duraklarListesiYaz();
+  duraklariYukle(noktalar, adlar);
   // Onizleme mumkunse gercek konumdan baslasin: ilk GPS olcumu icin kisa sure beklenir
   if (!durum.konum) {
     planMesaj('Konum bekleniyor...');

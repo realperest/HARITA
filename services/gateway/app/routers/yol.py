@@ -2,21 +2,27 @@
 
 /v1/yol/nokta: bir konumdaki yolun ozellikleri (sinif, hiz, trafik isigi, dur levhasi, tunel, kopru, gise ...) ve idari bolge;
     surus analizleri (or. ani durma: isikta mi, otoyolda mi) icin dis servis (Overpass) gerektirmez.
+/v1/yol/uyarilar: rota boyunca ya da harita kutusunda hiz kamerasi / hiz kesici noktalari (OSM).
+/v1/yol/hava: rota boyunca ornek noktalarda tahmini varis saatindeki hava (Open-Meteo) ve surus uyarilari.
 /v1/baglanti/coz: Google Haritalar / Yandex / Apple / Waze / OSM baglantisindan (kisa baglantilar dahil) koordinatlari cikarir.
 """
 
 import logging
 import re
+from datetime import datetime
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.config import ayarlar
 from app.crud import yerlesim as yerlesim_crud
+from app.crud import yol_uyari as uyari_crud
 from app.security import yetki
-from app.services import valhalla
-from app.services.http import istemci
+from app.services import hava, valhalla
+from app.services.http import AltServisHatasi
+from app.services.http import istemci as http_istemci
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["yol"])
@@ -25,6 +31,8 @@ router = APIRouter(prefix="/v1", tags=["yol"])
 IZINLI_ALANLAR = ("google.com", "google.com.tr", "goo.gl", "app.goo.gl", "maps.app.goo.gl", "g.co", "yandex.com", "yandex.com.tr",
                   "yandex.ru", "ya.cc", "apple.com", "waze.com", "openstreetmap.org", "osm.org")
 MAKS_YONLENDIRME = 5
+UYARI_TURLERI = {"hiz_kamerasi", "hiz_kesici"}
+MAKS_ROTA_NOKTASI = 50_000
 SAYI = r"(-?\d{1,3}(?:\.\d+)?)"
 
 
@@ -99,7 +107,7 @@ async def baglanti_coz(adres: str = Query(min_length=8, max_length=2000), _proje
         for _ in range(MAKS_YONLENDIRME):
             if noktalar:
                 break
-            yanit = await istemci().get(son, follow_redirects=False, timeout=8.0, headers={"User-Agent": "Mozilla/5.0 harita-gateway"})
+            yanit = await http_istemci().get(son, follow_redirects=False, timeout=8.0, headers={"User-Agent": "Mozilla/5.0 harita-gateway"})
             konum = yanit.headers.get("location")
             if yanit.status_code not in (301, 302, 303, 307, 308) or not konum:
                 # Yonlendirme yoksa sayfa icindeki ilk Google koordinat izine bak (ornegin consent sayfasi degilse)
@@ -164,7 +172,7 @@ async def yol_noktasi(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-
     if yon is not None:
         nokta.update(heading=yon, heading_tolerance=60)
     try:
-        yanit = await istemci().post(f"{ayarlar.ROTA_ADRESI}/locate", json={"locations": [nokta], "costing": maliyet, "verbose": True})
+        yanit = await http_istemci().post(f"{ayarlar.ROTA_ADRESI}/locate", json={"locations": [nokta], "costing": maliyet, "verbose": True})
     except httpx.HTTPError as hata:
         log.error("Valhalla locate ulasilamadi: %s", type(hata).__name__)
         raise HTTPException(status_code=502, detail="Rota servisi su an yanit vermiyor.") from hata
@@ -182,3 +190,81 @@ async def yol_noktasi(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-
         "il": icinde.get("il"), "ilce": icinde.get("ilce"), "mahalle_koy": icinde.get("mahalle_koy"),
         "en_yakin_merkez": idari["en_yakin_merkez"],
     }
+
+
+class UyariIstek(BaseModel):
+    """Rota boyunca uyari istegi: polyline (Valhalla shape, hassasiyet 6) ya da noktalar [[lat, lon], ...]."""
+
+    polyline: str | None = Field(default=None, max_length=2_000_000)
+    hassasiyet: int = Field(default=6, ge=5, le=6)
+    noktalar: list[tuple[float, float]] | None = Field(default=None, max_length=MAKS_ROTA_NOKTASI)
+    tampon_m: float = Field(default=25, ge=5, le=100)
+    turler: list[str] | None = None
+
+
+def _turler(turler: list[str] | None) -> list[str] | None:
+    """Tur listesini dogrular; bos ise hepsi."""
+    if not turler:
+        return None
+    bilinmeyen = set(turler) - UYARI_TURLERI
+    if bilinmeyen:
+        raise HTTPException(status_code=422, detail="Bilinmeyen uyari turu: " + ", ".join(sorted(bilinmeyen)))
+    return list(turler)
+
+
+@router.post("/yol/uyarilar")
+async def rota_uyarilari(istek: UyariIstek, _proje: dict = Depends(yetki("rota"))) -> dict:
+    """Rota cizgisine tampon_m icindeki hiz kamerasi ve hiz kesiciler; rota_m = rota baslangicindan uzaklik (sirali).
+    Navigasyonda kalan mesafe rota_m - surucunun rota uzerindeki konumu ile hesaplanir."""
+    uyarilar = await uyari_crud.rota_boyunca(_cizgi(istek), istek.tampon_m, _turler(istek.turler))
+    return {"uyarilar": uyarilar, "kaynak": "OpenStreetMap katkicilari (ODbL)"}
+
+
+@router.get("/yol/uyarilar")
+async def kutu_uyarilari(kutu: str = Query(description="bati,guney,dogu,kuzey (derece)", max_length=100),
+                         turler: list[str] | None = Query(default=None), sinir: int = Query(default=1000, ge=1, le=5000),
+                         _proje: dict = Depends(yetki("rota"))) -> dict:
+    """Harita kutusundaki hiz kamerasi / hiz kesici noktalari (harita uzerinde gostermek icin)."""
+    try:
+        bati, guney, dogu, kuzey = (float(d) for d in kutu.split(","))
+    except ValueError as hata:
+        raise HTTPException(status_code=422, detail="kutu bicimi: bati,guney,dogu,kuzey") from hata
+    if not (_gecerli(guney, bati) and _gecerli(kuzey, dogu)) or bati >= dogu or guney >= kuzey or (dogu - bati) * (kuzey - guney) > 25:
+        raise HTTPException(status_code=422, detail="Kutu gecersiz ya da cok buyuk (en fazla 25 derece kare).")
+    return {"uyarilar": await uyari_crud.kutuda(bati, guney, dogu, kuzey, _turler(turler), sinir)}
+
+
+class HavaIstek(UyariIstek):
+    """Rota boyunca hava: cizgi (polyline / noktalar), toplam sure (Valhalla summary.time), kalkis zamani ve ornek araligi."""
+
+    sure_sn: float | None = Field(default=None, gt=0, le=14 * 86400)
+    kalkis: datetime | None = None
+    aralik_m: float | None = Field(default=None, ge=1000, le=200_000)
+
+
+def _cizgi(istek: UyariIstek) -> list[list[float]]:
+    """Istekteki polyline ya da noktalari [boylam, enlem] listesine cevirir ve dogrular."""
+    if istek.polyline:
+        try:
+            cizgi = valhalla.polyline_coz(istek.polyline, istek.hassasiyet)
+        except (IndexError, ValueError) as hata:
+            raise HTTPException(status_code=422, detail="Polyline cozulemedi.") from hata
+    elif istek.noktalar:
+        cizgi = [[lon, lat] for lat, lon in istek.noktalar]
+    else:
+        raise HTTPException(status_code=422, detail="polyline ya da noktalar gerekli.")
+    if len(cizgi) < 2 or len(cizgi) > MAKS_ROTA_NOKTASI:
+        raise HTTPException(status_code=422, detail=f"Rota 2 ile {MAKS_ROTA_NOKTASI} nokta arasinda olmali.")
+    if any(not _gecerli(y, x) for x, y in cizgi):
+        raise HTTPException(status_code=422, detail="Koordinat gecersiz.")
+    return cizgi
+
+
+@router.post("/yol/hava")
+async def rota_havasi(istek: HavaIstek, _proje: dict = Depends(yetki("rota"))) -> dict:
+    """Rota boyunca (en fazla 25 ornek, en az 10 km arayla) varis saatindeki sicaklik, yagis, ruzgar, gorus ve uyarilar
+    (firtina, kar, buzlanma, kuvvetli_yagis, kuvvetli_ruzgar, sis). Tahmin 4 gunluktur; daha ilerisi tahmin_var=false."""
+    try:
+        return await hava.rota_boyunca(_cizgi(istek), istek.sure_sn, istek.kalkis, istek.aralik_m)
+    except AltServisHatasi as hata:
+        raise HTTPException(status_code=502, detail="Hava durumu servisi su an yanit vermiyor.") from hata

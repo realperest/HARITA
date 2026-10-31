@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.crud import adres as adres_crud
 from app.crud import adres_ayristir as adres_ayristir_crud
+from app.crud import kapi_havuzu
 from app.crud import yerlesim as yerlesim_crud
 from app.security import yetki
 
@@ -130,11 +131,50 @@ async def sokak_kapilari(sokak_id: int, limit: int = Query(default=200, ge=1, le
 @router.get("/sokak/{sokak_id}/en-yakin-kapi")
 async def sokak_en_yakin_kapi(sokak_id: int, lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180),
                               yaricap_m: int = Query(default=100, ge=5, le=1000), _proje: dict = Depends(yetki("adres"))) -> dict:
-    """Pin icin kapi numarasi onerisi: secilen sokaktaki en yakin kapi (mesafe_m ile). Yaricapta kapi yoksa 404."""
+    """Pin icin kapi numarasi onerisi: secilen sokaktaki en yakin kapi (mesafe_m ile). OSM'de yoksa ortak havuzdan ogrenilmis kapi
+    (kaynak: "havuz"). Yaricapta kapi yoksa 404."""
     veri = await adres_crud.en_yakin_kapi(sokak_id, lat, lon, yaricap_m)
+    if veri is None:
+        ogrenilen = await kapi_havuzu.en_yakin(sokak_id, lat, lon, yaricap_m)
+        if ogrenilen:
+            return {**ogrenilen, "tur": "kapi", "kaynak": "havuz", "ad": f"{ogrenilen['sokak']} No:{ogrenilen['kapi_no']}"}
     if veri is None:
         raise HTTPException(status_code=404, detail="Bu sokakta yakinda kapi numarasi yok.")
     return veri
+
+
+class KapiOgrenIstek(BaseModel):
+    """Teslimat / ziyaret konumu: kapinin onunde alinan GPS (dogruluk_m 50 ustu ise kabul edilmez)."""
+
+    sokak_id: int
+    kapi_no: str = Field(min_length=1, max_length=20, pattern=r"^[0-9A-Za-zÇĞİÖŞÜçğıöşü/ -]+$")
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    dogruluk_m: float | None = Field(default=None, ge=0, le=50)
+
+
+@router.post("/kapi-ogren")
+async def kapi_ogren(istek: KapiOgrenIstek, proje: dict = Depends(yetki("adres"))) -> dict:
+    """Ortak kapi havuzuna gozlem ekler: OSM'de olmayan kapi numarasi teslimat konumundan ogrenilir ve tum projelerin
+    ayristirma / en yakin kapi sonuclarinda kullanilir. Iki gozlemden sonra guvenilir sayilir. OSM'de varsa durum "osm_var"."""
+    try:
+        return await kapi_havuzu.ogren(proje["id"], istek.sokak_id, istek.kapi_no, istek.lat, istek.lon, istek.dogruluk_m)
+    except ValueError as hata:
+        raise HTTPException(status_code=422, detail=str(hata)) from hata
+
+
+@router.delete("/kapi-ogren/{kapi_id}")
+async def kapi_ogren_geri_al(kapi_id: int, proje: dict = Depends(yetki("adres"))) -> dict:
+    """Bu projenin bu kapi icin verdigi gozlemleri geri alir (yanlis bildirim). Diger projelerin gozlemleri kalir."""
+    if not await kapi_havuzu.geri_al(proje["id"], kapi_id):
+        raise HTTPException(status_code=404, detail="Bu projeye ait gozlem yok.")
+    return {"geri_alindi": True}
+
+
+@router.get("/sokak/{sokak_id}/ogrenilen-kapilar")
+async def sokak_ogrenilen_kapilari(sokak_id: int, _proje: dict = Depends(yetki("adres"))) -> list[dict]:
+    """Sokakta ortak havuzdan ogrenilmis kapilar (guvenilir: en az iki gozlem)."""
+    return await kapi_havuzu.sokak_kapilari(sokak_id)
 
 
 @router.get("/sokak/{sokak_id}/binalar")

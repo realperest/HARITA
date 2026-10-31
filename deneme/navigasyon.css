@@ -140,6 +140,9 @@ html, body {
 .dugme.ikincil { background: transparent; color: var(--metin); border-color: var(--sinir); font-weight: 500; }
 .dugme.tehlike { background: transparent; color: var(--hata); border-color: var(--hata); }
 .dugme.kucuk { min-height: 30px; padding: 3px 10px; font-size: 13px; }
+.hava { margin-top: 4px; color: var(--metin-ikincil); }
+.hava.uyari-var { color: var(--uyari, #D29922); }
+.dosya-sec { display: inline-flex; align-items: center; cursor: pointer; }
 
 /* Manevra karti */
 .manevra { padding: 12px 14px; }

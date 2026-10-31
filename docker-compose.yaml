@@ -61,6 +61,18 @@ services:
     expose:
       - "8002"
 
+  # Cok araçli / cok kuryeli rota planlama (VROOM). Sure-mesafe matrisini gateway Valhalla'dan alip hazir verir;
+  # bu servis yol verisi tutmaz, yalniz atama ve siralama problemini cozer. Yalniz ic agda.
+  plan:
+    mem_limit: 512m
+    cpus: 1.0
+    image: ghcr.io/vroom-project/vroom-docker:v1.14.0
+    restart: unless-stopped
+    environment:
+      VROOM_ROUTER: valhalla
+    expose:
+      - "3000"
+
   # Yerlesim yukleyicisi: Turkiye il / ilce / mahalle-koy sinirlari ve sehir-kasaba-koy-mezra-semt merkezlerini OSM'den yukler,
   # aylik tazeler. Semayi gateway kurar; yukleyici hazir olana kadar bekler.
   veri:
@@ -86,6 +98,9 @@ services:
       REDIS_URL: redis://default:${REDIS_SIFRE:?REDIS_SIFRE gerekli}@${REDIS_ADRESI:-95hm6k1qwzorg8isilwivryt}:6379/0
       YONETIM_ANAHTARI: ${YONETIM_ANAHTARI:?YONETIM_ANAHTARI gerekli}
       ROTA_ADRESI: http://rota:8002
+      PLAN_ADRESI: http://plan:3000
+      HAVA_ADRESI: ${HAVA_ADRESI:-https://api.open-meteo.com}
+      HAVA_ANAHTARI: ${HAVA_ANAHTARI:-}
       KARO_ADRESI: ${KARO_GENEL_ADRESI:?KARO_GENEL_ADRESI gerekli}
       LOG_SEVIYESI: ${LOG_SEVIYESI:-INFO}
     expose:

@@ -46,7 +46,13 @@
       </label>
       <button class="dugme ikincil kucuk" id="konumum" type="button">Konumum</button>
     </div>
+    <div class="secenekler">
+      <button class="dugme ikincil kucuk" id="paylas" type="button" hidden>Paylaş</button>
+      <button class="dugme ikincil kucuk" id="gpx-indir" type="button" hidden>GPX indir</button>
+      <label class="dugme ikincil kucuk dosya-sec">GPX yükle<input type="file" id="gpx-yukle" accept=".gpx,application/gpx+xml" hidden></label>
+    </div>
     <p class="mesaj" id="plan-mesaj" role="status"></p>
+    <p class="mesaj hava" id="hava" hidden></p>
   </section>
 
   <!-- Navigasyon: siradaki manevra -->

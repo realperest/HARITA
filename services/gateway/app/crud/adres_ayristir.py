@@ -13,6 +13,7 @@ import re
 from difflib import SequenceMatcher
 
 from app.crud.adres import SOKAK_ZINCIR_JOIN, adres_metni
+from app.crud import kapi_havuzu
 from app.crud import yerlesim as yerlesim_crud
 from app.db import havuz
 from app.metin import ad_katla
@@ -175,7 +176,12 @@ async def _kapilar(baglanti, sokak_idleri: list[int], kapi_no: str) -> list[dict
         """SELECT x.id, x.kapi_no, x.sokak_id, ST_Y(x.konum::geometry) AS lat, ST_X(x.konum::geometry) AS lon
              FROM kapi_numarasi x WHERE x.aktif_mi AND x.sokak_id = ANY($1::bigint[]) AND x.kapi_no_arama = $2
             ORDER BY array_position($1::bigint[], x.sokak_id)""", sokak_idleri, kapi_no.lower())
-    return [dict(s) for s in satirlar]
+    osm = [{**dict(s), "kaynak": "osm", "guvenilir": True} for s in satirlar]
+    # OSM'de bu numara olmayan sokaklar icin ortak havuzdan ogrenilmis kapilar (aday sirasi korunur)
+    olan = {k["sokak_id"] for k in osm}
+    havuzdan = [k for k in await kapi_havuzu.sokakta(baglanti, sokak_idleri, kapi_no) if k["sokak_id"] not in olan]
+    sira = {sid: i for i, sid in enumerate(sokak_idleri)}
+    return sorted(osm + havuzdan, key=lambda k: sira.get(k["sokak_id"], len(sira)))
 
 
 def _uzak_mi(a: dict, b: dict, metre: float = 150) -> bool:
@@ -314,8 +320,8 @@ async def ayristir_ve_dogrula(metin: str, baglam: dict | None = None) -> dict:
                     if mahalle else _parca(None, None, "bulunamadi" if mahalle_adi else "girilmedi", mahalle_adi)),
         "sokak": (_parca(sokak["ad"], sokak["id"], _durum(sokak_puan), a.sokak, sokak_puan) if sokak
                   else _parca(None, None, "bulunamadi" if a.sokak else "girilmedi", a.sokak)),
-        "kapi_no": {"deger": a.kapi_no, "id": kapi["id"] if kapi else None,
-                    "durum": "dogrulandi" if kapi else ("bulunamadi" if a.kapi_no and sokak else ("girildi" if a.kapi_no else "girilmedi"))},
+        "kapi_no": {"deger": a.kapi_no, "id": kapi["id"] if kapi else None, "kaynak": kapi["kaynak"] if kapi else None,
+                    "durum": ("dogrulandi" if kapi["guvenilir"] else "tek_gozlem") if kapi else ("bulunamadi" if a.kapi_no and sokak else ("girildi" if a.kapi_no else "girilmedi"))},
         "bina": (_parca(bina["ad"], bina["id"], _durum(bina_puan), a.bina, bina_puan) if bina
                  else _parca(a.bina, None, "girildi" if a.bina else "girilmedi", a.bina)),
         "bina_turu": a.bina_turu, "blok": a.blok, "kat": a.kat, "daire": a.daire, "posta_kodu": a.posta_kodu,
@@ -329,7 +335,7 @@ async def ayristir_ve_dogrula(metin: str, baglam: dict | None = None) -> dict:
         "parcalar": parcalar,
         "tarif": tarif or None,
         "konum": {**konum, "kesinlik": kesinlik} if konum else None,
-        "puan": min(_puan(parcalar, kesinlik), 70) if belirsiz else _puan(parcalar, kesinlik),
+        "puan": _puan_siniri(_puan(parcalar, kesinlik), belirsiz, kapi),
         "belirsiz": belirsiz,
         "eksikler": eksikler,
         "oneriler": oneriler,
@@ -389,6 +395,15 @@ def _duzgun_adres(parcalar: dict, a: Ayrisim, sokak: dict | None, il: dict | Non
     if yer:
         parca.append(f"{a.posta_kodu} {yer}".strip() if a.posta_kodu else yer)
     return adres_metni([", ".join(parca)], None, None, None) if parca else ""
+
+
+def _puan_siniri(puan: int, belirsiz: bool, kapi: dict | None) -> int:
+    """Belirsiz sonuc en fazla 70; havuzda tek gozlemle bilinen kapi en fazla 84 (kullanici onayi onerilir)."""
+    if belirsiz:
+        puan = min(puan, 70)
+    if kapi and not kapi["guvenilir"]:
+        puan = min(puan, 84)
+    return puan
 
 
 def _puan(parcalar: dict, kesinlik: str | None) -> int:

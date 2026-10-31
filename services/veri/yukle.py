@@ -18,6 +18,7 @@ import psycopg
 
 import adres
 import bina
+import uyari
 
 log = logging.getLogger("yukle")
 
@@ -235,7 +236,7 @@ def adim(ad: str, islev) -> bool:  # noqa: ANN001
 
 
 def tur_calistir() -> bool:
-    """Yerlesim, adres ve bina adimlarini sirayla calistirir; hepsi basariliysa True."""
+    """Yerlesim, yol uyarisi, adres ve bina adimlarini sirayla calistirir; hepsi basariliysa True."""
     with psycopg.connect(DATABASE_URL) as baglanti:
         tablo_bekle(baglanti)
 
@@ -259,7 +260,14 @@ def tur_calistir() -> bool:
             else:
                 log.info("Bina verisi guncel, yukleme gerekmiyor.")
 
-        sonuclar = [adim("Yerlesim", yerlesim_adimi)]
+        def uyari_adimi() -> None:
+            uyari.tablo_bekle(baglanti)
+            if uyari.gerekli_mi(baglanti, GUNCELLEME_GUN, ZORLA):
+                uyari.calistir(baglanti, indir, kaynak_tarihi, VERI_DIZINI)
+            else:
+                log.info("Yol uyarisi verisi guncel, yukleme gerekmiyor.")
+
+        sonuclar = [adim("Yerlesim", yerlesim_adimi), adim("Yol uyarisi", uyari_adimi)]
         # Adres ve bina, mahalle sinirlarina baglidir; yerlesim basarisizsa atlanir
         if sonuclar[0]:
             sonuclar.append(adim("Adres", adres_adimi))

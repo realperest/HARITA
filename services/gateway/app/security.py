@@ -68,22 +68,28 @@ def yetki(servis_kod: str):
         x_harita_anahtar: str | None = Header(default=None),
     ) -> dict:
         ham = x_harita_anahtar or request.path_params.get("anahtar")
-        if not ham:
-            raise HTTPException(status_code=401, detail="Harita anahtari gerekli.")
-        ozet = ozet_al(ham)
-        proje = await _projeyi_coz(ozet)
-        if proje is None or not proje["aktif"] or not proje["anahtar_aktif"]:
-            raise HTTPException(status_code=401, detail="Harita anahtari gecersiz.")
-        if proje["izinler"].get(servis_kod, 1) < IZIN_GOREBILIR:
-            raise HTTPException(status_code=403, detail="Bu servis icin izniniz yok.")
-        kaynak = request.headers.get("origin")
-        if kaynak and proje["kaynaklar"] and kaynak.rstrip("/") not in proje["kaynaklar"]:
-            raise HTTPException(status_code=403, detail="Bu kaynaktan erisim izni yok.")
-        await _kota_kontrol(proje)
+        proje, ozet = await anahtar_dogrula(ham, servis_kod, request.headers.get("origin"))
         arka_plan.add_task(proje_crud.kullanimi_say, proje["id"], servis_kod, ozet)
         return proje
 
     return _kapi
+
+
+async def anahtar_dogrula(ham: str | None, servis_kod: str, kaynak: str | None) -> tuple[dict, str]:
+    """Anahtar, servis izni, tarayici kaynagi ve kota kontrolu; (proje, anahtar ozeti) ya da HTTPException.
+    WebSocket gibi baslik bagimliligi kullanamayan uclar da bunu cagirir."""
+    if not ham:
+        raise HTTPException(status_code=401, detail="Harita anahtari gerekli.")
+    ozet = ozet_al(ham)
+    proje = await _projeyi_coz(ozet)
+    if proje is None or not proje["aktif"] or not proje["anahtar_aktif"]:
+        raise HTTPException(status_code=401, detail="Harita anahtari gecersiz.")
+    if proje["izinler"].get(servis_kod, 1) < IZIN_GOREBILIR:
+        raise HTTPException(status_code=403, detail="Bu servis icin izniniz yok.")
+    if kaynak and proje["kaynaklar"] and kaynak.rstrip("/") not in proje["kaynaklar"]:
+        raise HTTPException(status_code=403, detail="Bu kaynaktan erisim izni yok.")
+    await _kota_kontrol(proje)
+    return proje, ozet
 
 
 async def yonetim_kapisi(x_yonetim_anahtari: str | None = Header(default=None)) -> None:
