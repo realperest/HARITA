@@ -32,6 +32,8 @@ const KATMANLAR = [
 ];
 
 /** Her rota icin sirayla farkli renk. */
+/** Ust uste binen bacaklarin yan yana gorunmesi icin piksel kaydirmalari (listedeki siraya gore). */
+const ROTA_KAYDIRMA = [-7.5, -2.5, 2.5, 7.5];
 const ROTA_RENKLERI = ['#3FB950', '#58A6FF', '#D29922', '#F85149', '#BC8CFF', '#39C5CF', '#FF7B72', '#E3B341'];
 const IZOKRON_RENKLERI = ['#3FB950', '#D29922', '#F85149', '#BC8CFF', '#58A6FF'];
 const YER_RENKLERI = {
@@ -362,9 +364,9 @@ class MapLibreMotoru {
     this.veri.rotalar = liste;
     this.veriYaz('rotalar', {
       type: 'FeatureCollection',
-      features: liste.filter((r) => r.geometri).map((r) => {
-        const kay = (r.no % 2 ? -1 : 1) * 3;
-        return { type: 'Feature', geometry: r.geometri, properties: { renk: r.renk, kay, kayOk: [0, kay / 11] } };
+      features: liste.filter((r) => r.geometri).map((r, sira) => {
+        const kay = ROTA_KAYDIRMA[sira % ROTA_KAYDIRMA.length];
+        return { type: 'Feature', geometry: r.geometri, properties: { renk: r.renk, kay, kayOk: [0, kay / 22] } };
       }),
     });
   }
@@ -661,14 +663,63 @@ async function adresSec(r) {
   ham.hidden = false;
   ham.textContent = `${sayi(r.merkez.lat, 6)} ; ${sayi(r.merkez.lon, 6)}\n${JSON.stringify(r, null, 2)}`;
   motor.sinir(null);
+  $('ara-alan-dugme')?.remove();
+  let cizgi = null;
   if (r.tur === 'sokak') {
     try {
-      const detay = await api(`/v1/adres/sokak/${r.id}?cizgi=true`);
-      motor.sinir(detay.cizgi);
+      cizgi = (await api(`/v1/adres/sokak/${r.id}?cizgi=true`)).cizgi;
     } catch (hata) {
       console.warn('Sokak çizgisi alınamadı', hata);
     }
   }
+  try {
+    const idari = (await api(`/v1/adres/nokta?lat=${r.merkez.lat}&lon=${r.merkez.lon}&yaricap_m=50&limit=1`)).idari;
+    const kap = boyaDugmeleri(idari, cizgi);
+    kap.id = 'ara-alan-dugme';
+    ham.before(kap);
+    await alanBoya(idari, durum.boyaSeviye || 'mahalle_koy', cizgi);
+  } catch (hata) {
+    console.warn('Alan boyanamadı', hata);
+    if (cizgi) motor.sinir(cizgi);
+  }
+}
+
+/* ---------- Alan boyama (il / ilce / mahalle siniri) ---------- */
+
+const BOYA_SEVIYELERI = [['il', 'İl'], ['ilce', 'İlçe'], ['mahalle_koy', 'Mahalle / köy']];
+
+/** Noktanin bagli oldugu secilen seviyedeki siniri boyar; sinir yoksa ust seviyeye cikar. ek: birlikte cizilecek geometri (sokak cizgisi). */
+async function alanBoya(idari, seviye, ek = null) {
+  durum.boyaSeviye = seviye;
+  const sira = BOYA_SEVIYELERI.map((s) => s[0]);
+  const adaylar = sira.slice(0, sira.indexOf(seviye) + 1).reverse();
+  let sinir = null;
+  for (const tur of adaylar) {
+    const oge = (idari?.icinde || []).find((o) => o.tur === tur);
+    if (!oge) continue;
+    try {
+      const v = await api(`/v1/yerlesim/${oge.id}?sinir=true`);
+      if (v.sinir) { sinir = v.sinir; break; }
+    } catch (hata) {
+      console.warn('Sinir alınamadı', hata);
+    }
+  }
+  const parcalar = [sinir, ek].filter(Boolean);
+  motor.sinir(parcalar.length ? { type: 'GeometryCollection', geometries: parcalar } : null);
+}
+
+/** Il / ilce / mahalle secim dugmeleri; secilen seviyeyi boyar. */
+function boyaDugmeleri(idari, ek) {
+  const kap = el('div', { sinif: 'boya-dugmeleri' });
+  BOYA_SEVIYELERI.forEach(([tur, ad]) => {
+    const d = el('button', { type: 'button', sinif: `dugme ikincil${durum.boyaSeviye === tur ? ' aktif' : ''}`, metin: ad });
+    d.addEventListener('click', () => {
+      kap.querySelectorAll('button').forEach((b) => b.classList.toggle('aktif', b === d));
+      alanBoya(idari, tur, ek);
+    });
+    kap.append(d);
+  });
+  return kap;
 }
 
 /* ---------- Pin (konum -> adres) ---------- */
@@ -701,6 +752,8 @@ async function pinKoy(ll) {
     sonuc.append(kart('Adres', satirMetin(v.adres || 'Adres bilgisi yok', 'zincir'),
       satirMetin([v.il, v.ilce, v.mahalle].filter(Boolean).join(' › '), 'soluk'),
       v.idari.en_yakin_merkez ? satirMetin(`En yakın merkez: ${TUR_ETIKET[v.idari.en_yakin_merkez.tur] || ''} ${v.idari.en_yakin_merkez.ad} (${mesafeYaz(v.idari.en_yakin_merkez.mesafe_m)})`) : satirMetin('')));
+    sonuc.append(kart('Boyanan alan', boyaDugmeleri(v.idari, null)));
+    alanBoya(v.idari, durum.boyaSeviye || 'mahalle_koy');
     if (v.kapilar.length) sonuc.append(listeKart('Kapı numaraları', v.kapilar, (o) => `${mesafeYaz(o.mesafe_m)}`));
     if (v.sokaklar.length) sonuc.append(listeKart('En yakın sokaklar', v.sokaklar, (o) => `${o.ek.sinif} · ${mesafeYaz(o.mesafe_m)}`));
     if (v.yerler.length) sonuc.append(listeKart('Yakındaki yerler', v.yerler, (o) => `${o.ek.yer_turu} · ${mesafeYaz(o.mesafe_m)}`));

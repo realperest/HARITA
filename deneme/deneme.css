@@ -255,3 +255,7 @@ body {
 
 /* Leaflet "Konum" dugmesi */
 .leaflet-bar a.konum-dugmesi { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
+
+/* Boyanan alan (il / ilce / mahalle) secim dugmeleri */
+.boya-dugmeleri { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.boya-dugmeleri .dugme.aktif { border-color: var(--vurgu); color: var(--vurgu); }
