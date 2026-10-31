@@ -3,5 +3,6 @@
 set -eu
 
 HEDEF=/usr/share/nginx/html/yapilandirma.json
-printf '{"mtAnahtar": "%s"}\n' "${MAPTILER_ANAHTAR:-}" > "$HEDEF"
-echo "yapilandirma.json uretildi (MapTiler anahtari: $( [ -n "${MAPTILER_ANAHTAR:-}" ] && echo tanimli || echo yok ))"
+printf '{"mtAnahtar": "%s", "anahtar": "%s"}
+' "${MAPTILER_ANAHTAR:-}" "${HARITA_ANAHTAR:-}" > "$HEDEF"
+echo "yapilandirma.json uretildi (MapTiler: $( [ -n "${MAPTILER_ANAHTAR:-}" ] && echo tanimli || echo yok ), HARITA: $( [ -n "${HARITA_ANAHTAR:-}" ] && echo tanimli || echo yok ))"

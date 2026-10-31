@@ -896,7 +896,7 @@ async function baslat() {
   const hash = hashOku();
   const sunucu = await sunucuYapilandirmasi();
   durum.api = kayit.api || VARSAYILAN_API;
-  durum.anahtar = hash.anahtar || kayit.anahtar || '';
+  durum.anahtar = hash.anahtar || kayit.anahtar || sunucu.anahtar || '';
   durum.mtAnahtar = hash.mtAnahtar || kayit.mtAnahtar || sunucu.mtAnahtar || '';
   durum.katmanKod = kayit.katmanKod || 'v-dark';
   durum.motorAd = kayit.motorAd || 'maplibre';
