@@ -6,6 +6,7 @@ Kaynak OpenStreetMap (c) OpenStreetMap katkicilari, ODbL.
 """
 
 import logging
+import time
 import subprocess
 from pathlib import Path
 
@@ -230,11 +231,15 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
         log.info("Okuma bitti: sokak parcasi=%s yer=%s kapi=%s. Eslestirme basliyor...", *toplayici.sayac.values())
 
         for sorgu in MAHALLE_HAZIRLA:
+            baslangic = time.time()
             baglanti.execute(sorgu)
-        baglanti.commit()
-        for sorgu in ISLEM_SQL:
+            baglanti.commit()
+            log.info("Hazirlik tamam (%.0f sn): %s", time.time() - baslangic, sorgu[:70])
+        for sira, sorgu in enumerate(ISLEM_SQL, 1):
+            baslangic = time.time()
             baglanti.execute(sorgu, {"surum": surum})
             baglanti.commit()
+            log.info("Islem %s/%s tamam (%.0f sn)", sira, len(ISLEM_SQL), time.time() - baslangic)
         # Adi yazili kapilari sokaga bagla: ayni mahallede ayni (katlanmis) adli sokak
         baglanti.execute("CREATE INDEX IF NOT EXISTS ix_gecici_kapi_anahtar ON gecici_kapi (kaynak_anahtari)")
         baglanti.execute("UPDATE kapi_numarasi k SET sokak_id = s.id FROM gecici_kapi g, sokak s WHERE k.surum_id = %s "
