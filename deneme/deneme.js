@@ -293,9 +293,20 @@ class MapLibreMotoru {
     h.addLayer({ id: 'izokron-cizgi', type: 'line', source: 'izokron', paint: { 'line-color': ['get', 'renk'], 'line-width': 2 } });
     h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#58A6FF', 'fill-opacity': 0.15 } });
     h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#58A6FF', 'line-width': 2 } });
+    // Ust uste binen bacaklar yan yana gorunsun diye her bacak yola gore sola / saga kaydirilir; beyaz kenar ve yon oklari eklenir
+    h.addLayer({
+      id: 'rota-kenar', type: 'line', source: 'rotalar',
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': 7, 'line-offset': ['get', 'kay'], 'line-opacity': 0.9 },
+    });
     h.addLayer({
       id: 'rota-cizgi', type: 'line', source: 'rotalar',
-      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'renk'], 'line-width': 5 },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'renk'], 'line-width': 4.5, 'line-offset': ['get', 'kay'] },
+    });
+    h.addLayer({
+      id: 'rota-ok', type: 'symbol', source: 'rotalar', minzoom: 12,
+      layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'text-field': '›', 'text-font': ['Noto Sans Medium'], 'text-size': 22,
+        'text-keep-upright': false, 'text-allow-overlap': true, 'text-offset': ['get', 'kayOk'] },
+      paint: { 'text-color': '#FFFFFF', 'text-halo-color': ['get', 'renk'], 'text-halo-width': 2 },
     });
     h.addLayer({
       id: 'yerler-nokta', type: 'circle', source: 'yerler',
@@ -351,7 +362,10 @@ class MapLibreMotoru {
     this.veri.rotalar = liste;
     this.veriYaz('rotalar', {
       type: 'FeatureCollection',
-      features: liste.filter((r) => r.geometri).map((r) => ({ type: 'Feature', geometry: r.geometri, properties: { renk: r.renk } })),
+      features: liste.filter((r) => r.geometri).map((r) => {
+        const kay = (r.no % 2 ? -1 : 1) * 3;
+        return { type: 'Feature', geometry: r.geometri, properties: { renk: r.renk, kay, kayOk: [0, kay / 11] } };
+      }),
     });
   }
 
@@ -482,7 +496,7 @@ class LeafletMotoru {
     this.veri.rotalar = liste;
     this.rotaKatman.clearLayers();
     liste.filter((r) => r.geometri).forEach((r) => window.L.geoJSON({ type: 'Feature', geometry: r.geometri, properties: {} },
-      { style: { color: r.renk, weight: 5 }, interactive: false }).addTo(this.rotaKatman));
+      { style: { color: r.renk, weight: Math.max(4, 11 - 2 * ((r.no - 1) % 4)), opacity: 0.95 }, interactive: false }).addTo(this.rotaKatman));
   }
 
   yerler(fc) {
