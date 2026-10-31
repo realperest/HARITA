@@ -1,4 +1,4 @@
-"""Ek ozellikler: yol uyarilari (hiz kamerasi / hiz kesici), ortak kapi numarasi havuzu, paylasim kodu, GPX, rota boyunca hava, cok araçli planlama ve trafik profili."""
+"""Ek ozellikler: yol uyarilari (hiz kamerasi / hiz kesici), ortak kapi numarasi havuzu, paylasim kodu, GPX, rota boyunca hava, cok araçli planlama, trafik profili ve canli konum."""
 
 import json
 import math
@@ -262,3 +262,23 @@ async def test_trafik_profili(istemci):
     assert tahmin["valhalla_sure_sn"] == 180 and tahmin["tahmini_sure_sn"] == 252 and tahmin["kapsama"] == 0.6 and tahmin["canli_yol"] == 3
     sirasiz = {**iz, "noktalar": list(reversed(iz["noktalar"]))}
     assert (await istemci.post("/v1/trafik/iz", headers=b, json=sirasiz)).status_code == 422
+
+
+async def test_canli_konum_ve_bolgeler(istemci):
+    b = await baslik(istemci)
+    bolgeler = [{"id": "depo", "ad": "Depo", "merkez": {"lat": 41.16, "lon": 27.80}, "yaricap_m": 100},
+                {"id": "alan", "poligon": [[41.15, 27.85], [41.15, 27.87], [41.17, 27.87], [41.17, 27.85]]}]
+    assert (await istemci.put("/v1/canli/kuryeler/bolgeler", headers=b, json=bolgeler)).json()["bolge_sayisi"] == 2
+    assert len((await istemci.get("/v1/canli/kuryeler/bolgeler", headers=b)).json()) == 2
+    git = lambda lat, lon: istemci.post("/v1/canli/kuryeler/konum", headers=b, json={"id": "k1", "lat": lat, "lon": lon})  # noqa: E731
+    olay = lambda v: [(o["olay"], o["bolge"]) for o in v.json()["olaylar"] if o["tip"] == "bolge"]  # noqa: E731
+    assert olay(await git(41.1601, 27.8001)) == [("giris", "depo")]
+    assert olay(await git(41.1602, 27.8002)) == []
+    assert olay(await git(41.16, 27.86)) == [("giris", "alan"), ("cikis", "depo")]
+    son = (await istemci.get("/v1/canli/kuryeler/konumlar", headers=b)).json()
+    assert len(son) == 1 and son[0]["id"] == "k1" and son[0]["bolgeler"] == ["alan"]
+    # Kanallar projeye ozeldir
+    baska = await baslik(istemci)
+    assert (await istemci.get("/v1/canli/kuryeler/konumlar", headers=baska)).json() == []
+    assert (await istemci.put("/v1/canli/kuryeler/bolgeler", headers=b, json=[{"id": "x", "merkez": {"lat": 1, "lon": 1}}])).status_code == 422
+    assert (await istemci.get("/v1/canli/k%20x/konumlar", headers=b)).status_code == 422
