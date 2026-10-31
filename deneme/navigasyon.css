@@ -162,6 +162,8 @@ html, body {
 .ozet-kutu .deger { font-family: var(--font-sayi); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; }
 .ozet-kutu .etiket { color: var(--metin-ikincil); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 .dugmeler { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+/* Katman secici: alt cubukta her modda gorunur, yolda da degistirilebilir */
+.katman-sec { width: auto; max-width: 220px; min-height: 40px; }
 
 /* Konum isareti */
 .konum-isaret { width: 34px; height: 34px; }
@@ -199,4 +201,5 @@ html, body {
   .manevra-simge { width: 48px; height: 48px; }
   .dugmeler { width: 100%; }
   .dugmeler .dugme { flex: 1; }
+  .katman-sec { flex: 1 1 100%; max-width: none; }
 }

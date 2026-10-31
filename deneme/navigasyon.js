@@ -15,6 +15,26 @@ const ANAHTAR_EN_AZ = 16;
 const DUNYA_R = 6371008.8;
 
 const COSTING = { araba: 'auto', motosiklet: 'motorcycle', yaya: 'pedestrian' };
+
+const MT_ATIF = '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener">&copy; MapTiler</a> '
+  + '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap katkıcıları</a>';
+
+/**
+ * Secilebilir harita katmanlari (deneme sayfasiyla ayni). tur: vektor (kendi karolarimiz), mt (MapTiler raster),
+ * karma (uydu + kendi yol ve etiketlerimiz). acik: arayuz acik temaya gecer.
+ */
+const KATMANLAR = [
+  { kod: 'v-dark', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - koyu', tur: 'vektor', tema: 'dark' },
+  { kod: 'v-light', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - açık', tur: 'vektor', tema: 'light', acik: true },
+  { kod: 'v-white', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - beyaz', tur: 'vektor', tema: 'white', acik: true },
+  { kod: 'v-grayscale', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - gri', tur: 'vektor', tema: 'grayscale', acik: true },
+  { kod: 'v-black', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - siyah', tur: 'vektor', tema: 'black' },
+  { kod: 'karma', grup: 'Uydu', ad: 'Uydu + kendi yol ve etiketlerimiz', tur: 'karma', harita: 'satellite', uzanti: 'jpg' },
+  { kod: 'mt-hybrid', grup: 'Uydu', ad: 'Hibrit (MapTiler)', tur: 'mt', harita: 'hybrid-v4', uzanti: 'jpg' },
+  { kod: 'mt-satellite', grup: 'Uydu', ad: 'Uydu (MapTiler)', tur: 'mt', harita: 'satellite', uzanti: 'jpg' },
+  { kod: 'mt-streets', grup: 'MapTiler', ad: 'Sokak (MapTiler)', tur: 'mt', harita: 'streets-v2', uzanti: 'png', acik: true },
+  { kod: 'mt-osm', grup: 'MapTiler', ad: 'Ayrıntılı (MapTiler)', tur: 'mt', harita: 'openstreetmap', uzanti: 'png', acik: true },
+];
 /** Konum bu kadar metreden uzak ve ardisik bu kadar olcumde rota disindaysa yeniden rota istenir. */
 const SAPMA_ESIK_M = 35;
 const SAPMA_ARDISIK = 3;
@@ -46,7 +66,8 @@ const durum = {
   anahtar: '',
   sunucuAnahtar: '',
   yap: null,
-  tema: 'dark',
+  katmanKod: 'v-dark',
+  mtAnahtar: '',
   profil: 'araba',
   ses: true,
   simAcik: false,
@@ -141,7 +162,7 @@ function depoYaz(ad, veri) {
 }
 
 function ayarKaydet() {
-  depoYaz(NAV_DEPO, { tema: durum.tema, profil: durum.profil, ses: durum.ses, simAcik: durum.simAcik, simHiz: durum.simHiz });
+  depoYaz(NAV_DEPO, { katmanKod: durum.katmanKod, profil: durum.profil, ses: durum.ses, simAcik: durum.simAcik, simHiz: durum.simHiz });
 }
 
 const anahtarTemizle = (deger) => String(deger || '').replace(/['"\s]/g, '');
@@ -427,15 +448,70 @@ function varsayilanYapilandirma() {
   };
 }
 
+/** Secili katman; MapTiler anahtari yoksa MapTiler katmanlari yerine koyu sokak katmani kullanilir. */
+function aktifKatman() {
+  const k = KATMANLAR.find((x) => x.kod === durum.katmanKod) || KATMANLAR[0];
+  return k.tur !== 'vektor' && !durum.mtAnahtar ? KATMANLAR[0] : k;
+}
+
+function mtAdres(k) {
+  return `https://api.maptiler.com/maps/${k.harita}/{z}/{x}/{y}.${k.uzanti}?key=${encodeURIComponent(durum.mtAnahtar)}`;
+}
+
+/** Karma katman: uydu uzerinde okunur olsun diye yollar acik renk, yazilar beyaz ve koyu konturlu. */
+function karmaKatmanlari() {
+  const tum = layers('harita', namedFlavor('dark'), { lang: 'tr' });
+  const cizgiler = tum
+    .filter((l) => l.type === 'line' && ['roads', 'boundaries'].includes(l['source-layer']) && !/casing|tunnel_|bridges_/.test(l.id))
+    .map((l) => ({
+      ...l,
+      paint: { ...l.paint, 'line-color': l['source-layer'] === 'boundaries' ? '#FFD166' : '#FFFFFF', 'line-opacity': /roads_(other|minor_service|link)/.test(l.id) ? 0.3 : 0.8 },
+    }));
+  const yazilar = tum.filter((l) => l.type === 'symbol').map((l) => ({
+    ...l,
+    paint: { ...l.paint, 'text-color': '#FFFFFF', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.6, 'text-halo-blur': 0.5 },
+  }));
+  return [...cizgiler, ...yazilar];
+}
+
 function stilKur() {
   const yap = durum.yap;
-  return {
-    version: 8,
-    glyphs: yap.yaziTipleri,
-    sprite: `${yap.simgeler}/${durum.tema}`,
-    sources: { harita: { type: 'vector', tiles: [yap.karo.adres], maxzoom: yap.karo.maksYakinlastirma, attribution: yap.atif } },
-    layers: layers('harita', namedFlavor(durum.tema), { lang: 'tr' }),
-  };
+  const k = aktifKatman();
+  const kaynaklar = { harita: { type: 'vector', tiles: [yap.karo.adres], maxzoom: yap.karo.maksYakinlastirma, attribution: yap.atif } };
+  let katmanlar;
+  let sprite = 'dark';
+  if (k.tur === 'vektor') {
+    sprite = k.tema;
+    katmanlar = layers('harita', namedFlavor(k.tema), { lang: 'tr' });
+  } else {
+    kaynaklar.zemin = { type: 'raster', tiles: [mtAdres(k)], tileSize: 512, maxzoom: 20, attribution: MT_ATIF };
+    katmanlar = [{ id: 'zemin', type: 'raster', source: 'zemin' }];
+    if (k.tur === 'karma') katmanlar.push(...karmaKatmanlari());
+  }
+  return { version: 8, glyphs: yap.yaziTipleri, sprite: `${yap.simgeler}/${sprite}`, sources: kaynaklar, layers: katmanlar };
+}
+
+/** Arayuz rengi katmana uyar: acik sokak katmanlarinda acik tema, digerlerinde koyu. */
+function temaUygula() {
+  const acik = Boolean(aktifKatman().acik);
+  if (acik) document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', acik ? '#F6F8FA' : '#0E1116');
+}
+
+function katmanSecimiDoldur() {
+  const sec = $('katman');
+  sec.replaceChildren();
+  const gruplar = new Map();
+  for (const k of KATMANLAR) {
+    if (!gruplar.has(k.grup)) gruplar.set(k.grup, el('optgroup', { label: k.grup }));
+    const gerekli = k.tur !== 'vektor' && !durum.mtAnahtar;
+    const secenek = el('option', { value: k.kod, metin: gerekli ? `${k.ad} (MapTiler anahtarı gerekli)` : k.ad });
+    if (gerekli) secenek.disabled = true;
+    gruplar.get(k.grup).append(secenek);
+  }
+  gruplar.forEach((g) => sec.append(g));
+  sec.value = aktifKatman().kod;
 }
 
 /** Rota, hedef ve manevra katmanlari; stil her degistiginde yeniden eklenir. */
@@ -948,11 +1024,12 @@ function olaylariBagla() {
     if (durum.konum) harita.flyTo({ center: [durum.konum.lon, durum.konum.lat], zoom: 15, duration: 800 });
     konumIzlemeBaslat();
   });
-  $('tema').addEventListener('click', () => {
-    durum.tema = durum.tema === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = durum.tema === 'light' ? 'light' : '';
+  $('katman').addEventListener('change', (o) => {
+    durum.katmanKod = o.target.value;
     ayarKaydet();
-    harita.setStyle(stilKur());
+    temaUygula();
+    // Stil tamamen yenilenir; rota, hedef ve manevra katmanlari style.load ile geri eklenir
+    harita.setStyle(stilKur(), { diff: false });
   });
   $('baslat').addEventListener('click', navBaslat);
   $('iptal').addEventListener('click', hedefTemizle);
@@ -1003,14 +1080,15 @@ function sesDenetle() {
 
 async function baslat() {
   const ayar = depoOku(NAV_DEPO);
+  // Eski kayitta yalniz tema varsa (acik/koyu) karsilik gelen sokak katmanina cevir
+  const eskiKatman = ayar.tema === 'light' ? 'v-light' : 'v-dark';
   Object.assign(durum, {
-    tema: ayar.tema === 'light' ? 'light' : 'dark',
+    katmanKod: KATMANLAR.some((k) => k.kod === ayar.katmanKod) ? ayar.katmanKod : eskiKatman,
     profil: COSTING[ayar.profil] ? ayar.profil : 'araba',
     ses: ayar.ses !== false,
     simAcik: Boolean(ayar.simAcik),
     simHiz: Number(ayar.simHiz) || 50,
   });
-  if (durum.tema === 'light') document.documentElement.dataset.theme = 'light';
   $('profil').value = durum.profil;
   $('sim').checked = durum.simAcik;
   $('sim-hiz').value = String(durum.simHiz);
@@ -1020,6 +1098,9 @@ async function baslat() {
   durum.api = deneme.api || VARSAYILAN_API;
   durum.sunucuAnahtar = ilkGecerliAnahtar(sunucu.anahtar);
   durum.anahtar = ilkGecerliAnahtar(deneme.anahtar, durum.sunucuAnahtar);
+  durum.mtAnahtar = ilkGecerliAnahtar(deneme.mtAnahtar, sunucu.mtAnahtar);
+  katmanSecimiDoldur();
+  temaUygula();
   durum.yap = await haritaYapilandirmasi();
 
   harita = new maplibregl.Map({

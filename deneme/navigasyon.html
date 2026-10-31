@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261031.1429">
+  <link rel="stylesheet" href="navigasyon.css?v=261031.1432">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
@@ -20,7 +20,6 @@
       <span class="marka">HARITA <span class="soluk">navigasyon</span></span>
       <nav class="baglantilar">
         <a href="index.html">Harita denemesi</a>
-        <button class="dugme ikincil kucuk" id="tema" type="button">Tema</button>
       </nav>
     </div>
     <input class="girdi" id="hedef-ara" type="search" placeholder="Nereye? Adres, yer veya sokak" autocomplete="off" spellcheck="false" aria-label="Hedef ara">
@@ -73,6 +72,7 @@
       <div class="ozet-kutu"><span class="deger" id="hiz">-</span><span class="etiket">hız</span></div>
     </div>
     <div class="dugmeler">
+      <select class="girdi katman-sec" id="katman" aria-label="Harita katmanı"></select>
       <button class="dugme" id="baslat" type="button" hidden>Başlat</button>
       <button class="dugme ikincil" id="iptal" type="button" hidden>İptal</button>
       <button class="dugme ikincil" id="ortala" type="button" hidden>Ortala</button>
@@ -83,6 +83,6 @@
   </section>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261031.1429"></script>
+  <script type="module" src="navigasyon.js?v=261031.1432"></script>
 </body>
 </html>
