@@ -444,11 +444,56 @@ function turkceSes() {
 }
 
 /** Metni Turkce okur; oncelikliyse sirada bekleyen konusmalari keser. */
+/*
+ * Valhalla'nin Turkce sablonu her yol adinin arkasina "caddesine / caddesinde ..." ekler; ad zaten yol turuyle bitince
+ * "Cumhuriyet Caddesi caddesine" gibi tekrar olusur. Bu durumda genel kelime atilir ve ek, ada ses uyumuyla baglanir:
+ * "Cumhuriyet Caddesi'ne", "Utangac Sokagi'nda", "Ataturk Bulvari'ndan", "Gul Sokak'a", "Istiklal Cadde'ye".
+ */
+// Iyelik ekiyle biten yol turleri: ek "n" kaynastirmasiyla gelir (Caddesi'ne)
+const IYELIKLI_YOL = ['caddesi', 'sokağı', 'sokaği', 'bulvarı', 'yolu', 'otoyolu', 'meydanı', 'köprüsü', 'geçidi', 'tüneli',
+  'kavşağı', 'çıkmazı', 'yokuşu', 'parkı', 'çarşısı', 'sahili', 'kordonu', 'sokakları', 'caddeleri'];
+// Yalin yol turleri ve kisaltmalar (kisaltma okunusu: Cd. -> Cadde, Sk. -> Sokak)
+const YALIN_YOL = { cadde: 'cadde', sokak: 'sokak', bulvar: 'bulvar', yol: 'yol', otoyol: 'otoyol', meydan: 'meydan', köprü: 'köprü',
+  geçit: 'geçit', tünel: 'tünel', kavşak: 'kavşak', çıkmaz: 'çıkmaz', yokuş: 'yokuş', 'cd.': 'cadde', 'cad.': 'cadde',
+  'sk.': 'sokak', 'sok.': 'sokak', 'blv.': 'bulvar', 'bulv.': 'bulvar' };
+// Yalniz yol turu kelimesinin hemen ardindan gelen genel kelime eslenir ("Cumhuriyet Caddesi" tek basina eslenmez)
+const YOL_TURU_DESENI = [...IYELIKLI_YOL, ...Object.keys(YALIN_YOL)]
+  .sort((a, b) => b.length - a.length).map((k) => k.replace(/\./g, '\\.')).join('|');
+const GENEL_CADDE = new RegExp(`(?<=^|\\s)(${YOL_TURU_DESENI})\\s+cadde(si|sine|sinde|sinden|sini)(?=[\\s.,;:!?)]|$)`, 'giu');
+
+function sesliEk(kelime, hal, iyelikli) {
+  const unluler = [...kelime].filter((h) => 'aıoueiöü'.includes(h));
+  const son = unluler.at(-1) || 'e';
+  const kalin = 'aıou'.includes(son);
+  const unluyleBiter = 'aıoueiöü'.includes(kelime.at(-1));
+  const sert = 'fstkçşhp'.includes(kelime.at(-1));
+  const a = kalin ? 'a' : 'e';
+  const dortlu = { a: 'ı', ı: 'ı', o: 'u', u: 'u', e: 'i', i: 'i', ö: 'ü', ü: 'ü' }[son];
+  if (hal === 'sine') return iyelikli ? `n${a}` : unluyleBiter ? `y${a}` : a;
+  if (hal === 'sinde') return iyelikli ? `nd${a}` : `${sert ? 't' : 'd'}${a}`;
+  if (hal === 'sinden') return iyelikli ? `nd${a}n` : `${sert ? 't' : 'd'}${a}n`;
+  if (hal === 'sini') return iyelikli ? `n${dortlu}` : unluyleBiter ? `y${dortlu}` : dortlu;
+  return '';
+}
+
+/** Talimat metnindeki "X Caddesi caddesine" tekrarini "X Caddesi'ne" yapar; yol turu olmayan adlara dokunmaz. */
+function yolAdiDuzelt(metin) {
+  if (!metin) return metin;
+  return metin.replace(GENEL_CADDE, (tam, onceki, hal) => {
+    const kucuk = onceki.toLocaleLowerCase('tr-TR');
+    const iyelikli = IYELIKLI_YOL.includes(kucuk);
+    const yalin = YALIN_YOL[kucuk];
+    if (!iyelikli && !yalin) return tam;
+    const ek = sesliEk(iyelikli ? kucuk : yalin, hal.toLocaleLowerCase('tr-TR'), iyelikli);
+    return ek ? `${onceki}'${ek}` : onceki;
+  });
+}
+
 function soyle(metin, oncelikli = false) {
   if (!durum.ses || !metin || !('speechSynthesis' in window)) return;
   if (oncelikli) speechSynthesis.cancel();
   // Valhalla Turkce metinlerinde sayi ile birim bitisik gelebiliyor ("2kilometre"); okunurken ayrilir
-  const konusma = new SpeechSynthesisUtterance(metin.replace(/(\d)([a-zçğıöşü])/gi, '$1 $2'));
+  const konusma = new SpeechSynthesisUtterance(yolAdiDuzelt(metin).replace(/(\d)([a-zçğıöşü])/gi, '$1 $2'));
   konusma.lang = 'tr-TR';
   const ses = turkceSes();
   if (ses) konusma.voice = ses;
@@ -685,7 +730,10 @@ function simgeCiz(m) {
 }
 
 /** Adi olmayan yollarda Valhalla talimati kucuk harfle baslar ("sola donun."); ekranda buyuk harfle baslatir. */
-const buyukBasla = (metin) => (metin ? metin.charAt(0).toLocaleUpperCase('tr-TR') + metin.slice(1) : '');
+const buyukBasla = (metin) => {
+  const duz = yolAdiDuzelt(metin);
+  return duz ? duz.charAt(0).toLocaleUpperCase('tr-TR') + duz.slice(1) : '';
+};
 
 function manevraKartiYaz(rota, i, kalanM) {
   const m = rota.manevralar[i];
