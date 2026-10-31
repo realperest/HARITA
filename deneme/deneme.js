@@ -312,8 +312,8 @@ class MapLibreMotoru {
     }
     h.addLayer({ id: 'izokron-dolgu', type: 'fill', source: 'izokron', paint: { 'fill-color': ['get', 'renk'], 'fill-opacity': 0.16 } });
     h.addLayer({ id: 'izokron-cizgi', type: 'line', source: 'izokron', paint: { 'line-color': ['get', 'renk'], 'line-width': 2 } });
-    h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#58A6FF', 'fill-opacity': 0.15 } });
-    h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#58A6FF', 'line-width': 2 } });
+    h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#F5A623', 'fill-opacity': 0.15 } });
+    h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#F5A623', 'line-width': 2 } });
     // Rota bacaklari: ic ice kalinlik (ust uste binince hepsi gorunur), beyaz kenar ve yon oklari
     h.addLayer({
       id: 'rota-kenar', type: 'line', source: 'rotalar',
@@ -510,7 +510,7 @@ class LeafletMotoru {
     this.sinirKatman.clearLayers();
     if (geometri) {
       window.L.geoJSON({ type: 'Feature', geometry: geometri, properties: {} },
-        { style: { color: '#58A6FF', weight: 2, fillColor: '#58A6FF', fillOpacity: 0.15 }, interactive: false }).addTo(this.sinirKatman);
+        { style: { color: '#F5A623', weight: 2, fillColor: '#F5A623', fillOpacity: 0.15 }, interactive: false }).addTo(this.sinirKatman);
     }
   }
 
@@ -712,7 +712,7 @@ function comboYol(adim, secili) {
  * Basamakli acilir listeler. adimSayisi kadar liste kurulur; kullanici bir secim yapinca secildi(tur, oge) cagrilir.
  * ac(): ilk acilista il listesini ve canli konumun il / ilcesini (secili) yukler; odak true ise il listesine odaklanir.
  */
-function comboKur(kap, adimSayisi, mesajId, secildi) {
+function comboKur(kap, adimSayisi, mesajId, secildi, canliSecildi = secildi) {
   const secili = new Array(adimSayisi).fill(null);
   const ogeler = new Array(adimSayisi).fill([]);
   const sayac = new Array(adimSayisi).fill(0);
@@ -773,8 +773,9 @@ function comboKur(kap, adimSayisi, mesajId, secildi) {
         if (il && sec(0, il.id)) {
           await yukle(1);
           const ilce = nokta.icinde.find((o) => o.tur === 'ilce');
-          if (ilce) sec(1, ilce.id);
+          const canliOge = ilce && sec(1, ilce.id) || il;
           await Promise.all(Array.from({ length: adimSayisi - 2 }, (_, k) => yukle(k + 2)));
+          canliSecildi(canliOge.tur, canliOge);
         }
       }
       yuklendi = true;
@@ -1258,8 +1259,8 @@ async function baslat() {
   $('yer-tur').addEventListener('change', yerAra);
   durum.combolar = {
     ara: comboKur($('ara-combo'), 6, 'ara-mesaj', comboAraSec),
-    pin: comboKur($('pin-combo'), 3, 'pin-mesaj', (tur, o) => pinKoy({ lat: o.merkez.lat, lng: o.merkez.lon })),
-    yerlesim: comboKur($('yer-combo'), 3, 'yer-mesaj', (tur, o) => yerSec(o.id)),
+    pin: comboKur($('pin-combo'), 3, 'pin-mesaj', (tur, o) => pinKoy({ lat: o.merkez.lat, lng: o.merkez.lon }), comboAraSec),
+    yerlesim: comboKur($('yer-combo'), 3, 'yer-mesaj', (tur, o) => yerSec(o.id), comboAraSec),
   };
   $('rota-ciz').addEventListener('click', rotaCiz);
   $('matris-hesapla').addEventListener('click', matrisHesapla);
