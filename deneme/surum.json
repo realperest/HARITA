@@ -1,4 +1,5 @@
 [
+  {"surum": "261031.2000", "not": "Navigasyon: 1 km anonsu ve bitisik sayi-birim (2kilometre) okumasi duzeltildi"},
   {"surum": "261031.1932", "not": "Navigasyon: konum yokken cok duraklı rota ilk duraktan baslar"},
   {"surum": "261031.1907", "not": "Navigasyon: cok duraklı rota, duraklar listesi, baglantiyla acilma (duraklar, hedef, Google / Yandex baglantisi)"},
   {"surum": "261031.1432", "not": "Navigasyon: harita katmani secimi (sokak temalari, uydu, hibrit, karma, MapTiler); arayuz rengi katmana uyar"},

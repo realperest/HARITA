@@ -127,7 +127,8 @@ function mesafeYaz(m) {
 
 /** Sesli okunacak mesafe: 50 m adim ya da 0,1 km. */
 function sesliMesafe(m) {
-  if (m < 1000) return `${sayi(Math.max(50, Math.round(m / 50) * 50))} metre`;
+  // 975 m ve ustu "1 kilometre" okunur ("1.000 metre" yerine)
+  if (m < 975) return `${sayi(Math.max(50, Math.round(m / 50) * 50))} metre`;
   return `${sayi(Math.round(m / 100) / 10, m >= 10000 ? 0 : 1)} kilometre`;
 }
 
@@ -446,7 +447,8 @@ function turkceSes() {
 function soyle(metin, oncelikli = false) {
   if (!durum.ses || !metin || !('speechSynthesis' in window)) return;
   if (oncelikli) speechSynthesis.cancel();
-  const konusma = new SpeechSynthesisUtterance(metin);
+  // Valhalla Turkce metinlerinde sayi ile birim bitisik gelebiliyor ("2kilometre"); okunurken ayrilir
+  const konusma = new SpeechSynthesisUtterance(metin.replace(/(\d)([a-zçğıöşü])/gi, '$1 $2'));
   konusma.lang = 'tr-TR';
   const ses = turkceSes();
   if (ses) konusma.voice = ses;
