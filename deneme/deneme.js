@@ -32,8 +32,6 @@ const KATMANLAR = [
 ];
 
 /** Her rota icin sirayla farkli renk. */
-/** Ust uste binen bacaklarin yan yana gorunmesi icin piksel kaydirmalari (listedeki siraya gore). */
-const ROTA_KAYDIRMA = [-7.5, -2.5, 2.5, 7.5];
 const ROTA_RENKLERI = ['#3FB950', '#58A6FF', '#D29922', '#F85149', '#BC8CFF', '#39C5CF', '#FF7B72', '#E3B341'];
 const IZOKRON_RENKLERI = ['#3FB950', '#D29922', '#F85149', '#BC8CFF', '#58A6FF'];
 const YER_RENKLERI = {
@@ -295,19 +293,19 @@ class MapLibreMotoru {
     h.addLayer({ id: 'izokron-cizgi', type: 'line', source: 'izokron', paint: { 'line-color': ['get', 'renk'], 'line-width': 2 } });
     h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#58A6FF', 'fill-opacity': 0.15 } });
     h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#58A6FF', 'line-width': 2 } });
-    // Ust uste binen bacaklar yan yana gorunsun diye her bacak yola gore sola / saga kaydirilir; beyaz kenar ve yon oklari eklenir
+    // Rota bacaklari: ic ice kalinlik (ust uste binince hepsi gorunur), beyaz kenar ve yon oklari
     h.addLayer({
       id: 'rota-kenar', type: 'line', source: 'rotalar',
-      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': 7, 'line-offset': ['get', 'kay'], 'line-opacity': 0.9 },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': ['get', 'kenar'], 'line-opacity': 0.9 },
     });
     h.addLayer({
       id: 'rota-cizgi', type: 'line', source: 'rotalar',
-      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'renk'], 'line-width': 4.5, 'line-offset': ['get', 'kay'] },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'renk'], 'line-width': ['get', 'kal'] },
     });
     h.addLayer({
       id: 'rota-ok', type: 'symbol', source: 'rotalar', minzoom: 12,
       layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'text-field': '›', 'text-font': ['Noto Sans Medium'], 'text-size': 22,
-        'text-keep-upright': false, 'text-allow-overlap': true, 'text-offset': ['get', 'kayOk'] },
+        'text-keep-upright': false, 'text-allow-overlap': true },
       paint: { 'text-color': '#FFFFFF', 'text-halo-color': ['get', 'renk'], 'text-halo-width': 2 },
     });
     h.addLayer({
@@ -365,8 +363,9 @@ class MapLibreMotoru {
     this.veriYaz('rotalar', {
       type: 'FeatureCollection',
       features: liste.filter((r) => r.geometri).map((r, sira) => {
-        const kay = ROTA_KAYDIRMA[sira % ROTA_KAYDIRMA.length];
-        return { type: 'Feature', geometry: r.geometri, properties: { renk: r.renk, kay, kayOk: [0, kay / 22] } };
+        // Ust uste binen bacaklar yon farkindan bagimsiz gorunsun diye ic ice kalinlik: ilk bacak en kalin, sonrakiler daha ince ustte
+        const kal = Math.max(3, 12 - 2.4 * sira);
+        return { type: 'Feature', geometry: r.geometri, properties: { renk: r.renk, kal, kenar: kal + 2.5 } };
       }),
     });
   }
