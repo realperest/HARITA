@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0E1116">
+  <title>HARITA Navigasyon</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="navigasyon.css?v=261031.1420">
+</head>
+<body>
+  <div id="harita" class="harita" aria-label="Harita"></div>
+
+  <!-- Planlama: hedef arama ve secenekler -->
+  <section id="plan" class="ust-kart" aria-label="Rota planlama">
+    <div class="ust-satir">
+      <span class="marka">HARITA <span class="soluk">navigasyon</span></span>
+      <nav class="baglantilar">
+        <a href="index.html">Harita denemesi</a>
+        <button class="dugme ikincil kucuk" id="tema" type="button">Tema</button>
+      </nav>
+    </div>
+    <input class="girdi" id="hedef-ara" type="search" placeholder="Nereye? Adres, yer veya sokak" autocomplete="off" spellcheck="false" aria-label="Hedef ara">
+    <ul class="liste" id="sonuclar"></ul>
+    <div class="secenekler">
+      <label class="secim">Profil
+        <select class="girdi kucuk" id="profil">
+          <option value="araba">Araba</option>
+          <option value="motosiklet">Motosiklet</option>
+          <option value="yaya">Yaya</option>
+        </select>
+      </label>
+      <label class="onay"><input type="checkbox" id="sim"> Simülasyon</label>
+      <label class="secim" id="sim-hiz-alan">Hız
+        <select class="girdi kucuk" id="sim-hiz">
+          <option value="30">30 km/sa</option>
+          <option value="50">50 km/sa</option>
+          <option value="70">70 km/sa</option>
+          <option value="90">90 km/sa</option>
+          <option value="120">120 km/sa</option>
+        </select>
+      </label>
+      <button class="dugme ikincil kucuk" id="konumum" type="button">Konumum</button>
+    </div>
+    <p class="mesaj" id="plan-mesaj" role="status"></p>
+  </section>
+
+  <!-- Navigasyon: siradaki manevra -->
+  <section id="manevra" class="ust-kart manevra" aria-live="polite" hidden>
+    <div class="manevra-ana">
+      <svg class="manevra-simge" viewBox="-12 -12 24 24" aria-hidden="true">
+        <path id="simge-ok" d="M0 -10 L7.5 -1.5 L2.6 -1.5 L2.6 10 L-2.6 10 L-2.6 -1.5 L-7.5 -1.5 Z"></path>
+        <path id="simge-hedef" d="M0 10 C-1 6 -7 1.5 -7 -3.5 A7 7 0 0 1 7 -3.5 C7 1.5 1 6 0 10 Z M0 -6.2 A2.7 2.7 0 1 0 0.01 -6.2 Z" fill-rule="evenodd" display="none"></path>
+      </svg>
+      <div class="manevra-yazi">
+        <div class="manevra-mesafe" id="manevra-mesafe">-</div>
+        <div class="manevra-metin" id="manevra-metin"></div>
+      </div>
+    </div>
+    <div class="manevra-sonra" id="manevra-sonra" hidden></div>
+  </section>
+
+  <!-- Alt cubuk: ozet ve eylemler -->
+  <section id="alt" class="alt-cubuk" aria-label="Rota özeti">
+    <p class="ipucu" id="alt-ipucu">Hedef seçin: arayın ya da haritaya dokunun.</p>
+    <div class="ozet" id="ozet" hidden>
+      <div class="ozet-kutu"><span class="deger" id="kalan-sure">-</span><span class="etiket">süre</span></div>
+      <div class="ozet-kutu"><span class="deger" id="kalan-mesafe">-</span><span class="etiket">mesafe</span></div>
+      <div class="ozet-kutu"><span class="deger" id="varis">-</span><span class="etiket">varış</span></div>
+      <div class="ozet-kutu"><span class="deger" id="hiz">-</span><span class="etiket">hız</span></div>
+    </div>
+    <div class="dugmeler">
+      <button class="dugme" id="baslat" type="button" hidden>Başlat</button>
+      <button class="dugme ikincil" id="iptal" type="button" hidden>İptal</button>
+      <button class="dugme ikincil" id="ortala" type="button" hidden>Ortala</button>
+      <button class="dugme ikincil" id="sapma" type="button" hidden>Sapma dene</button>
+      <button class="dugme ikincil" id="ses" type="button" hidden>Ses: açık</button>
+      <button class="dugme tehlike" id="bitir" type="button" hidden>Bitir</button>
+    </div>
+  </section>
+
+  <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
+  <script type="module" src="navigasyon.js?v=261031.1420"></script>
+</body>
+</html>
