@@ -240,22 +240,32 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
             baglanti.execute(sorgu, {"surum": surum})
             baglanti.commit()
             log.info("Islem %s/%s tamam (%.0f sn)", sira, len(ISLEM_SQL), time.time() - baslangic)
-        # Adi yazili kapilari sokaga bagla: ayni mahallede ayni (katlanmis) adli sokak
-        baglanti.execute("CREATE INDEX IF NOT EXISTS ix_gecici_kapi_anahtar ON gecici_kapi (kaynak_anahtari)")
-        baglanti.execute("UPDATE kapi_numarasi k SET sokak_id = s.id FROM gecici_kapi g, sokak s WHERE k.surum_id = %s "
-                         "AND g.kaynak_anahtari = k.kaynak_anahtari AND g.sokak_ad_arama IS NOT NULL AND s.aktif_mi "
-                         "AND s.ad_arama = g.sokak_ad_arama AND k.mahalle_id IS NOT DISTINCT FROM s.mahalle_id", (surum,))
-        baglanti.commit()
-        # Adi yazili ama tam eslesmeyen kapilar: ayni mahallede benzer adli sokak (yazim farki); yoksa sokaga baglanmaz
-        baglanti.execute("UPDATE kapi_numarasi k SET sokak_id = (SELECT s.id FROM sokak s WHERE s.aktif_mi AND s.ad_arama %% g.sokak_ad_arama "
-                         "AND similarity(s.ad_arama, g.sokak_ad_arama) > 0.6 AND k.mahalle_id IS NOT DISTINCT FROM s.mahalle_id "
-                         "ORDER BY similarity(s.ad_arama, g.sokak_ad_arama) DESC LIMIT 1) FROM gecici_kapi g "
-                         "WHERE k.surum_id = %s AND k.sokak_id IS NULL AND g.kaynak_anahtari = k.kaynak_anahtari AND g.sokak_ad_arama IS NOT NULL", (surum,))
-        baglanti.commit()
-        # Sokak adi hic yazilmamis kapilar: 60 m icindeki en yakin sokak
-        baglanti.execute("UPDATE kapi_numarasi k SET sokak_id = (SELECT s.id FROM sokak s WHERE s.aktif_mi AND ST_DWithin(s.cizgi, k.konum, 60) "
-                         "ORDER BY s.cizgi <-> k.konum LIMIT 1) WHERE k.surum_id = %s AND k.sokak_id IS NULL AND k.sokak_ad IS NULL", (surum,))
-        baglanti.commit()
+        # Kapi -> sokak baglama. Ayni ad cok mahallede tekrarlandigi icin esleme mahalle ile birlikte (esitlik) yapilir
+        baglama = [
+            "DROP TABLE IF EXISTS gecici_kapi_esle",
+            "CREATE UNLOGGED TABLE gecici_kapi_esle AS SELECT k.id AS kapi_id, k.mahalle_id, g.sokak_ad_arama AS ad FROM kapi_numarasi k "
+            "JOIN gecici_kapi g ON g.kaynak_anahtari = k.kaynak_anahtari WHERE k.surum_id = %(s)s AND k.mahalle_id IS NOT NULL "
+            "AND g.sokak_ad_arama IS NOT NULL",
+            "CREATE INDEX ix_gecici_kapi_esle ON gecici_kapi_esle (mahalle_id, ad)",
+            "CREATE INDEX IF NOT EXISTS ix_sokak_mahalle_ad ON sokak (mahalle_id, ad_arama)",
+            "ANALYZE gecici_kapi_esle",
+            # tam ad eslesmesi: ayni mahallede ayni (katlanmis) adli sokak
+            "UPDATE kapi_numarasi k SET sokak_id = s.id FROM gecici_kapi_esle e JOIN sokak s ON s.mahalle_id = e.mahalle_id AND s.ad_arama = e.ad "
+            "AND s.aktif_mi WHERE k.id = e.kapi_id",
+            # adi yazili ama tam eslesmeyen: ayni mahallede benzer adli sokak (yazim farki); yoksa sokaga baglanmaz
+            "UPDATE kapi_numarasi k SET sokak_id = (SELECT s.id FROM sokak s WHERE s.mahalle_id = e.mahalle_id AND s.aktif_mi "
+            "AND similarity(s.ad_arama, e.ad) > 0.6 ORDER BY similarity(s.ad_arama, e.ad) DESC LIMIT 1) FROM gecici_kapi_esle e "
+            "WHERE k.id = e.kapi_id AND k.sokak_id IS NULL",
+            # sokak adi hic yazilmamis kapilar: 60 m icindeki en yakin sokak
+            "UPDATE kapi_numarasi k SET sokak_id = (SELECT s.id FROM sokak s WHERE s.aktif_mi AND ST_DWithin(s.cizgi, k.konum, 60) "
+            "ORDER BY s.cizgi <-> k.konum LIMIT 1) WHERE k.surum_id = %(s)s AND k.sokak_id IS NULL AND k.sokak_ad IS NULL",
+            "DROP TABLE IF EXISTS gecici_kapi_esle",
+        ]
+        for sira, sorgu in enumerate(baglama, 1):
+            baslangic = time.time()
+            baglanti.execute(sorgu, {"s": surum})
+            baglanti.commit()
+            log.info("Baglama %s/%s tamam (%.0f sn)", sira, len(baglama), time.time() - baslangic)
         for tablo in ("sokak", "yer_isareti", "kapi_numarasi"):
             baglanti.execute(f"UPDATE {tablo} SET aktif_mi = FALSE WHERE aktif_mi AND surum_id IS DISTINCT FROM %s", (surum,))
         sayilar = [baglanti.execute(f"SELECT count(*) FROM {t} WHERE aktif_mi").fetchone()[0] for t in ("sokak", "yer_isareti", "kapi_numarasi")]
