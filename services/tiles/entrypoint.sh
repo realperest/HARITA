@@ -30,6 +30,11 @@ if [ ! -s "$DOSYA" ]; then
     echo "[karo] Indirme tamam."
 fi
 
+# Cevrimdisi il paketleri arka planda (CEVRIMDISI_PAKET=False ile kapatilir)
+if [ "${CEVRIMDISI_PAKET:-True}" = "True" ]; then
+    /paketle.sh &
+fi
+
 envsubst '${IZINLI_KOKEN_REGEX}' < /etc/nginx/harita.conf.template > /etc/nginx/nginx.conf
 
 # TileJSON (/tiles/turkiye.json) icin genel adres gerekir

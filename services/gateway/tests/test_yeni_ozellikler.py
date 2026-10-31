@@ -282,3 +282,19 @@ async def test_canli_konum_ve_bolgeler(istemci):
     assert (await istemci.get("/v1/canli/kuryeler/konumlar", headers=baska)).json() == []
     assert (await istemci.put("/v1/canli/kuryeler/bolgeler", headers=b, json=[{"id": "x", "merkez": {"lat": 1, "lon": 1}}])).status_code == 422
     assert (await istemci.get("/v1/canli/k%20x/konumlar", headers=b)).status_code == 422
+
+
+@respx.mock
+async def test_cevrimdisi_paketler(istemci):
+    b = await baslik(istemci)
+    await cache.istemci().delete("cevrimdisi:liste:json")
+    liste = {"maks_yakinlastirma": 14, "varlik": "varlik.tar.gz", "paketler": [
+        {"kod": "tekirdag", "ad": "Tekirdağ", "kutu": [26.6, 40.5, 28.3, 41.6], "boyut": 1000, "tarih": "2026-10-31T00:00:00Z", "dosya": "tekirdag.pmtiles"}]}
+    yol = respx.get("http://tiles:8080/paket/liste.json").mock(return_value=httpx.Response(200, json=liste))
+    v = (await istemci.get("/v1/cevrimdisi/paketler", headers=b)).json()
+    assert v["paketler"][0]["adres"] == "https://karo.test/paket/tekirdag.pmtiles" and v["varlik"] == "https://karo.test/paket/varlik.tar.gz"
+    await istemci.get("/v1/cevrimdisi/paketler", headers=b)
+    assert yol.call_count == 1
+    await cache.istemci().delete("cevrimdisi:liste:json")
+    respx.get("http://tiles:8080/paket/liste.json").mock(return_value=httpx.Response(404))
+    assert (await istemci.get("/v1/cevrimdisi/paketler", headers=b)).status_code == 503

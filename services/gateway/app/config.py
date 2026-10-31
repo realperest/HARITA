@@ -13,6 +13,8 @@ class Ayarlar(BaseSettings):
     # Tarayicinin karolari cekecegi genel adres (or. https://karo.harita.example.com)
     KARO_ADRESI: str
     KARO_ADI: str = "turkiye"
+    # Karo servisinin ic agdaki adresi (cevrimdisi paket listesi icin)
+    KARO_ICERI_ADRESI: str = "http://tiles:8080"
     KARO_MAKS_YAKINLASTIRMA: int = 15
     UPSTREAM_ZAMAN_ASIMI_SN: float = 15.0
     ANAHTAR_ONBELLEK_SN: int = 60

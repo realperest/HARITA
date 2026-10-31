@@ -40,6 +40,23 @@ http {
             add_header Vary Origin always;
         }
 
+        # Cevrimdisi paketler: il PMTiles dosyalari (Range destekli, yarida kalan indirme surdurulebilir) ve liste.json
+        location = /paket/varlik.tar.gz {
+            alias /usr/share/harita/varlik.tar.gz;
+            add_header Cache-Control "public, max-age=604800" always;
+            add_header Access-Control-Allow-Origin $cors_izin always;
+            add_header Vary Origin always;
+        }
+
+        location /paket/ {
+            if ($request_method = OPTIONS) { return 204; }
+            alias /veri/paket/;
+            types { application/json json; application/octet-stream pmtiles; }
+            add_header Cache-Control "public, max-age=3600" always;
+            add_header Access-Control-Allow-Origin $cors_izin always;
+            add_header Vary Origin always;
+        }
+
         location /assets/ {
             if ($request_method = OPTIONS) { return 204; }
             alias /usr/share/harita/assets/;

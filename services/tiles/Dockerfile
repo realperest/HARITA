@@ -20,7 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 COPY --from=hazirlik /derle/pmtiles /usr/local/bin/pmtiles
 COPY --from=hazirlik /derle/varlik /usr/share/harita/assets
 COPY nginx.conf.template /etc/nginx/harita.conf.template
+# Cevrimdisi kullanim icin yazi tipleri + simgeler tek arsivde (/paket/varlik.tar.gz)
+RUN tar -czf /usr/share/harita/varlik.tar.gz -C /usr/share/harita assets
+COPY paketler.csv /etc/harita/paketler.csv
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh /usr/local/bin/pmtiles
+COPY paketle.sh /paketle.sh
+RUN chmod +x /entrypoint.sh /paketle.sh /usr/local/bin/pmtiles
 EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]
