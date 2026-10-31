@@ -606,7 +606,7 @@ async function durumYenile() {
   } catch (hata) {
     console.error('Durum okunamadı', hata);
   }
-  const etiketler = { veritabani: 'Veritabanı', redis: 'Redis', rota: 'Rota ve matris', arama: 'Adres arama' };
+  const etiketler = { veritabani: 'Veritabanı', redis: 'Redis', rota: 'Rota ve matris', adres: 'Adres indeksi' };
   for (const [anahtar, ad] of Object.entries(etiketler)) {
     const acik = veri ? Boolean(veri[anahtar]) : false;
     liste.append(el('li', {}, el('span', { sinif: `nokta ${veri ? (acik ? 'acik' : 'kapali') : ''}` }), el('span', { metin: `${ad}: ${veri ? (acik ? 'hazır' : 'hazır değil') : 'bilinmiyor'}` })));

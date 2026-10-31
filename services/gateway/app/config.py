@@ -10,7 +10,6 @@ class Ayarlar(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     YONETIM_ANAHTARI: str
     ROTA_ADRESI: str = "http://rota:8002"
-    ARAMA_ADRESI: str = "http://arama:2322"
     # Tarayicinin karolari cekecegi genel adres (or. https://karo.harita.example.com)
     KARO_ADRESI: str
     KARO_ADI: str = "turkiye"

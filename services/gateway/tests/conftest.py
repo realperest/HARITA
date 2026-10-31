@@ -7,7 +7,6 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:56379/0")
 os.environ.setdefault("YONETIM_ANAHTARI", "test-yonetim")
 os.environ.setdefault("KARO_ADRESI", "https://karo.test")
 os.environ.setdefault("ROTA_ADRESI", "http://rota.test:8002")
-os.environ.setdefault("ARAMA_ADRESI", "http://arama.test:2322")
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402

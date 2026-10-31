@@ -29,7 +29,7 @@ Ortak kurallar:
 | Rota boyunca | `POST /v1/adres/rota-boyunca` `{koordinatlar, tur, tampon_m}` | Rota cizgisi boyunca yerler, rota sirasina gore |
 | Nominatim uyumlu | `GET /nominatim/search?q=`, `/nominatim/reverse?lat=&lon=` | Nominatim bekleyen istemciler |
 | Photon uyumlu | `GET /photon/api?q=`, `/photon/reverse` | Photon bekleyen istemciler (kendi indeksimizden) |
-| Photon (ham) | `GET /v1/arama`, `/v1/ters-arama` | Gezegen Photon indeksi; kendi adres indeksimiz hazir oldugu icin ikincil |
+| Arama (GeoJSON) | `GET /v1/arama`, `/v1/ters-arama` | Photon bicimli GeoJSON; kendi adres indeksimizden |
 | Yonetim | `/yonetim/*` | Proje, anahtar, izin, kaynak, kullanim |
 
 ## SIPARIS

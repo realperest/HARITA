@@ -86,13 +86,12 @@ async def test_matris(istemci):
     assert yanit.json() == {"sure_sn": [[60, None]], "mesafe_m": [[1500.0, None]]}
 
 
-@respx.mock
 async def test_arama(istemci):
-    respx.get("http://arama.test:2322/api").mock(return_value=httpx.Response(200, json={"type": "FeatureCollection", "features": []}))
     _, anahtar = await proje_ac(istemci)
     yanit = await istemci.get("/v1/arama?q=kadikoy", headers={"X-Harita-Anahtar": anahtar})
     assert yanit.status_code == 200 and yanit.json()["type"] == "FeatureCollection"
     assert (await istemci.get("/v1/arama?q=k", headers={"X-Harita-Anahtar": anahtar})).status_code == 422
+    assert (await istemci.get("/v1/ters-arama?lat=41&lon=28", headers={"X-Harita-Anahtar": anahtar})).json()["type"] == "FeatureCollection"
 
 
 async def test_servis_izni_yok(istemci):

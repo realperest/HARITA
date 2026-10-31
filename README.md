@@ -11,14 +11,13 @@ Kapsam: tum Turkiye. Veri: OpenStreetMap (c) OpenStreetMap katkicilari (ODbL).
 |---|---|---|---|
 | `tiles` | Protomaps PMTiles + nginx | Vektor harita karolari, yazi tipleri, simgeler | Evet (alan adi, onbellekli) |
 | `rota` | Valhalla | Rota, sure/mesafe matrisi (auto, motosiklet, bisiklet, yaya) | Hayir (ic ag) |
-| `arama` | Photon | Adres / yer arama, ters arama | Hayir (ic ag) |
 | `gateway` | FastAPI | Proje anahtari, izin, kaynak kisiti, kota, kullanim sayaci, OSRM uyumlu rota | Evet (alan adi) |
-| `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlari ve sehir-kasaba-koy-mezra-semt merkezlerini OSM'den yukler, aylik tazeler | Hayir |
+| `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlarini, sokaklari, kapi numaralarini, yerleri ve adlandirilmis binalari OSM'den yukler, aylik tazeler. Adres aramasi bu veriden yapilir (dis servis yok) | Hayir |
 | `db`, `redis` | PostGIS 17, Redis 7 | Proje / anahtar kayitlari, kota sayaclari ve yerlesim verisi | Hayir |
 
 Neden bu secimler: karolar tek dosyadir (PMTiles), sunucu CPU'su yemez, Cloudflare onbellegine uygundur ve MapTiler gibi
 ucretli/kotali dis servise ihtiyac birakmaz. Valhalla bellege eslemeli cizge kullandigi icin tum Turkiye'yi OSRM'den dusuk
-bellekle tasir ve motosiklet profili vardir. Photon yazarken-ara (typeahead) icin tasarlanmistir.
+bellekle tasir ve motosiklet profili vardir.
 
 ## Bir projeyi baglamak
 

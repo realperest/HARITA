@@ -69,23 +69,6 @@ services:
     expose:
       - "8002"
 
-  # Adres / yer arama ve ters arama (Photon). Dizin ilk acilista gezegen dokumunden TR icin uretilir (uzun surer).
-  arama:
-    mem_limit: 3500m
-    cpus: 1.5
-    build: ./services/photon
-    restart: unless-stopped
-    environment:
-      ULKE_KODLARI: ${ULKE_KODLARI:-TR}
-      DIL_KODLARI: ${DIL_KODLARI:-tr,en}
-      PHOTON_BELLEK: ${PHOTON_BELLEK:-2g}
-      # Rota cizgesi hazir olana kadar indeks uretimi beklenir (iki agir isi ayni anda calistirmamak icin)
-      ROTA_BEKLE_ADRESI: http://rota:8002/status
-    volumes:
-      - harita_arama:/veri
-    expose:
-      - "2322"
-
   # Yerlesim yukleyicisi: Turkiye il / ilce / mahalle-koy sinirlari ve sehir-kasaba-koy-mezra-semt merkezlerini OSM'den yukler,
   # aylik tazeler. Semayi gateway kurar; yukleyici hazir olana kadar bekler.
   veri:
@@ -119,7 +102,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       YONETIM_ANAHTARI: ${YONETIM_ANAHTARI:?YONETIM_ANAHTARI gerekli}
       ROTA_ADRESI: http://rota:8002
-      ARAMA_ADRESI: http://arama:2322
       KARO_ADRESI: ${KARO_GENEL_ADRESI:?KARO_GENEL_ADRESI gerekli}
       LOG_SEVIYESI: ${LOG_SEVIYESI:-INFO}
     expose:
@@ -130,4 +112,3 @@ volumes:
   harita_veri:
   harita_karo:
   harita_rota2:
-  harita_arama:
