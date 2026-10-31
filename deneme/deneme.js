@@ -915,7 +915,7 @@ function satirMetin(metin, sinif = '') {
   return el('div', { sinif, metin });
 }
 
-async function pinKoy(ll) {
+async function pinKoy(ll, boya = true) {
   motor.pin(ll);
   const sonuc = $('pin-sonuc');
   sonuc.replaceChildren();
@@ -936,7 +936,7 @@ async function pinKoy(ll) {
       satirMetin([v.il, v.ilce, v.mahalle].filter(Boolean).join(' › '), 'soluk'),
       v.idari.en_yakin_merkez ? satirMetin(`En yakın merkez: ${TUR_ETIKET[v.idari.en_yakin_merkez.tur] || ''} ${v.idari.en_yakin_merkez.ad} (${mesafeYaz(v.idari.en_yakin_merkez.mesafe_m)})`) : satirMetin('')));
     sonuc.append(kart('Boyanan alan', boyaDugmeleri(v.idari, null)));
-    alanBoya(v.idari, durum.boyaSeviye || 'mahalle_koy');
+    if (boya) alanBoya(v.idari, durum.boyaSeviye || 'mahalle_koy');
     if (v.kapilar.length) sonuc.append(listeKart('Kapı numaraları', v.kapilar, (o) => `${mesafeYaz(o.mesafe_m)}`));
     if (v.sokaklar.length) sonuc.append(listeKart('En yakın sokaklar', v.sokaklar, (o) => `${o.ek.sinif} · ${mesafeYaz(o.mesafe_m)}`));
     if (v.yerler.length) sonuc.append(listeKart('Yakındaki yerler', v.yerler, (o) => `${o.ek.yer_turu} · ${mesafeYaz(o.mesafe_m)}`));
@@ -1259,7 +1259,7 @@ async function baslat() {
   $('yer-tur').addEventListener('change', yerAra);
   durum.combolar = {
     ara: comboKur($('ara-combo'), 6, 'ara-mesaj', comboAraSec),
-    pin: comboKur($('pin-combo'), 3, 'pin-mesaj', (tur, o) => pinKoy({ lat: o.merkez.lat, lng: o.merkez.lon }), comboAraSec),
+    pin: comboKur($('pin-combo'), 3, 'pin-mesaj', async (tur, o) => { await comboAraSec(tur, o); pinKoy({ lat: o.merkez.lat, lng: o.merkez.lon }, false); }, comboAraSec),
     yerlesim: comboKur($('yer-combo'), 3, 'yer-mesaj', (tur, o) => yerSec(o.id), comboAraSec),
   };
   $('rota-ciz').addEventListener('click', rotaCiz);
