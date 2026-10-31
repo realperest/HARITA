@@ -1,6 +1,7 @@
 /**
  * HARITA veritabani araci: tablo listesi, veri (arama, filtre, siralama, sayfalama, CSV), yapi ve salt okunur SQL.
- * Yonetim anahtari yalniz bu sekmenin oturum deposunda (sessionStorage) tutulur; koda ve depoya yazilmaz.
+ * Yonetim anahtari tarayicida tutulur: "Bu tarayicida hatirla" isaretliyse kalici depoda (localStorage),
+ * degilse yalniz bu sekmede (sessionStorage). Koda ve depoya yazilmaz; Cikis ve gecersiz anahtar kaydi siler.
  */
 
 const VARSAYILAN_API = 'https://harita-api.89.45.45.152.sslip.io';
@@ -93,17 +94,21 @@ async function api(yol, secenek = {}) {
 
 /* ---------- Oturum ---------- */
 
-function oturumYaz() {
+/** Anahtari secime gore kalici depoya ya da yalniz bu sekmeye yazar; digerindeki eski kaydi siler. */
+function oturumYaz(hatirla) {
+  const veri = JSON.stringify({ api: durum.api, anahtar: durum.anahtar });
   try {
-    sessionStorage.setItem(OTURUM_ANAHTARI, JSON.stringify({ api: durum.api, anahtar: durum.anahtar }));
+    (hatirla ? localStorage : sessionStorage).setItem(OTURUM_ANAHTARI, veri);
+    (hatirla ? sessionStorage : localStorage).removeItem(OTURUM_ANAHTARI);
   } catch (hata) {
     console.warn('Oturum kaydedilemedi', hata);
   }
 }
 
+/** Once bu sekmenin, sonra tarayicinin kalici kaydini okur. */
 function oturumOku() {
   try {
-    return JSON.parse(sessionStorage.getItem(OTURUM_ANAHTARI) || '{}');
+    return JSON.parse(sessionStorage.getItem(OTURUM_ANAHTARI) || localStorage.getItem(OTURUM_ANAHTARI) || '{}');
   } catch (hata) {
     console.warn('Oturum okunamadı', hata);
     return {};
@@ -114,6 +119,7 @@ function oturumKapat() {
   durum.anahtar = '';
   try {
     sessionStorage.removeItem(OTURUM_ANAHTARI);
+    localStorage.removeItem(OTURUM_ANAHTARI);
   } catch (hata) {
     console.warn('Oturum silinemedi', hata);
   }
@@ -130,7 +136,7 @@ async function girisYap(olay) {
   $('giris-mesaj').className = 'mesaj';
   try {
     await api('/yonetim/veritabani/ozet');
-    oturumYaz();
+    oturumYaz($('hatirla').checked);
     $('yonetim-anahtar').value = '';
     await uygulamaAc();
   } catch (hata) {

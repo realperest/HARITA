@@ -21,13 +21,14 @@
   <main id="giris-alani" class="giris" hidden>
     <form id="giris-form" class="kart giris-kart" autocomplete="off">
       <h1>Yönetim girişi</h1>
-      <p class="soluk">Veritabanını görmek için yönetim anahtarını girin. Anahtar yalnız bu sekmede tutulur.</p>
+      <p class="soluk">Veritabanını görmek için yönetim anahtarını girin. Anahtar yalnız bu tarayıcıda tutulur; Çıkış ile silinir.</p>
       <label class="alan">API adresi
         <input class="girdi" id="api-adres" type="url" required>
       </label>
       <label class="alan">Yönetim anahtarı
         <input class="girdi" id="yonetim-anahtar" type="password" required autocomplete="off">
       </label>
+      <label class="onay"><input type="checkbox" id="hatirla" checked> Bu tarayıcıda hatırla</label>
       <button class="dugme" type="submit">Giriş</button>
       <div id="giris-mesaj" class="mesaj" role="status"></div>
     </form>
@@ -49,6 +50,6 @@
   </main>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="veritabani.js?v=261031.1600"></script>
+  <script type="module" src="veritabani.js?v=261031.1341"></script>
 </body>
 </html>
