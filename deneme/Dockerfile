@@ -3,6 +3,7 @@
 FROM nginx:1.27-alpine
 
 COPY index.html deneme.css deneme.js veritabani.html veritabani.css veritabani.js surum.json /usr/share/nginx/html/
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY yapilandirma-uret.sh /docker-entrypoint.d/40-yapilandirma-uret.sh
 RUN chmod +x /docker-entrypoint.d/40-yapilandirma-uret.sh
 
