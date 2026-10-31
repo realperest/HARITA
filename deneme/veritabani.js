@@ -132,6 +132,12 @@ async function girisYap(olay) {
   olay.preventDefault();
   durum.api = $('api-adres').value.trim() || VARSAYILAN_API;
   durum.anahtar = $('yonetim-anahtar').value.trim();
+  // Gercek yonetim anahtari uzundur; kisa deger tarayici otomatik doldurmasindan kalmadir
+  if (durum.anahtar.length < 16) {
+    $('giris-mesaj').textContent = 'Anahtar eksik görünüyor. Alanı temizleyip yönetim anahtarının tamamını yapıştırın.';
+    $('giris-mesaj').className = 'mesaj hata';
+    return;
+  }
   $('giris-mesaj').textContent = 'Bağlanılıyor...';
   $('giris-mesaj').className = 'mesaj';
   try {

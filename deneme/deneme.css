@@ -118,6 +118,8 @@ body {
   font: inherit;
 }
 .alan-satir .girdi { margin-top: 0; width: auto; }
+/* Anahtar alanlari: type=password yerine metin + maske; tarayici parola yoneticisi doldurmaz */
+.gizli-girdi { -webkit-text-security: disc; }
 .girdi:focus-visible, .dugme:focus-visible, .sekme-dugme:focus-visible, .liste button:focus-visible {
   outline: 2px solid var(--ikincil);
   outline-offset: 1px;

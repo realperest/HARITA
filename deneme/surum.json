@@ -1,4 +1,5 @@
 [
+  {"surum": "261031.1352", "not": "Anahtar alanlari tarayici parola doldurmasina kapali; kisa (bozuk) kayitli anahtar yok sayilir, sunucu anahtari kullanilir"},
   {"surum": "261031.1346", "not": "Veritabani araci: giris ekraninda tablo paneli gizlendi (hidden CSS duzeltmesi)"},
   {"surum": "261031.1341", "not": "Veritabani araci: yonetim anahtari bu tarayicida hatirlanir (Cikis ile silinir)"},
   {"surum": "261031.1334", "not": "Sayfa dosyalari onbelleklenmez (no-cache); dagitimdan sonra eski deneme.js kullanilmaz"},

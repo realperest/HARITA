@@ -65,6 +65,8 @@ html, body {
   border-radius: var(--radius);
   font: inherit;
 }
+/* Anahtar alani: type=password yerine metin + maske; tarayici parola yoneticisi doldurmaz */
+.gizli-girdi { -webkit-text-security: disc; }
 .girdi:focus-visible, .dugme:focus-visible, .tablo-oge:focus-visible, .sekme:focus-visible { outline: 2px solid var(--ikincil); outline-offset: 1px; }
 .dugme {
   min-height: 36px;

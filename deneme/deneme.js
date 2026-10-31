@@ -88,6 +88,20 @@ function mesaj(id, metin, tur = '') {
   kutu.className = `mesaj ${tur}`.trim();
 }
 
+/* Gercek anahtarlar 16 karakterden uzundur; daha kisa deger tarayici otomatik doldurmasindan kalmadir */
+const ANAHTAR_EN_AZ = 16;
+const anahtarTemizle = (deger) => String(deger || '').replace(/['"\s]/g, '');
+
+/** Verilen adaylardan ilk gecerli (yeterince uzun) anahtari dondurur; yoksa bos. */
+function ilkGecerliAnahtar(...adaylar) {
+  for (const aday of adaylar) {
+    const temiz = anahtarTemizle(aday);
+    if (temiz.length >= ANAHTAR_EN_AZ) return temiz;
+    if (temiz) console.warn(`Geçersiz kısa anahtar yok sayıldı (${temiz.length} karakter)`);
+  }
+  return '';
+}
+
 function depoOku() {
   try {
     return JSON.parse(localStorage.getItem(DEPO_ANAHTARI) || '{}');
@@ -587,8 +601,10 @@ function katmanDegistir(kod) {
 
 async function baglan() {
   durum.api = $('api-adres').value.trim() || VARSAYILAN_API;
-  durum.anahtar = $('api-anahtar').value.trim();
-  durum.mtAnahtar = $('mt-anahtar').value.trim();
+  durum.anahtar = ilkGecerliAnahtar($('api-anahtar').value, durum.sunucuAnahtar);
+  durum.mtAnahtar = ilkGecerliAnahtar($('mt-anahtar').value, durum.sunucuMtAnahtar);
+  $('api-anahtar').value = durum.anahtar;
+  $('mt-anahtar').value = durum.mtAnahtar;
   depoYaz({ api: durum.api, anahtar: durum.anahtar, mtAnahtar: durum.mtAnahtar });
   try {
     let yap;
@@ -1054,9 +1070,10 @@ async function baslat() {
   const hash = hashOku();
   const sunucu = await sunucuYapilandirmasi();
   durum.api = kayit.api || VARSAYILAN_API;
-  durum.sunucuAnahtar = sunucu.anahtar || '';
-  durum.anahtar = hash.anahtar || kayit.anahtar || durum.sunucuAnahtar;
-  durum.mtAnahtar = (hash.mtAnahtar || kayit.mtAnahtar || sunucu.mtAnahtar || '').replace(/['"\s]/g, '');
+  durum.sunucuAnahtar = ilkGecerliAnahtar(sunucu.anahtar);
+  durum.sunucuMtAnahtar = ilkGecerliAnahtar(sunucu.mtAnahtar);
+  durum.anahtar = ilkGecerliAnahtar(hash.anahtar, kayit.anahtar, durum.sunucuAnahtar);
+  durum.mtAnahtar = ilkGecerliAnahtar(hash.mtAnahtar, kayit.mtAnahtar, durum.sunucuMtAnahtar);
   durum.katmanKod = kayit.katmanKod || 'v-dark';
   durum.motorAd = kayit.motorAd || 'maplibre';
   durum.yap = varsayilanYapilandirma();

@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="deneme.css">
+  <link rel="stylesheet" href="deneme.css?v=261031.1352">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/protomaps-leaflet@5.1.0/dist/protomaps-leaflet.js"></script>
 </head>
@@ -53,10 +53,10 @@
           <input class="girdi mono" id="api-adres" type="url" autocomplete="off" spellcheck="false">
         </label>
         <label class="alan">Harita anahtarı
-          <input class="girdi mono" id="api-anahtar" type="password" autocomplete="off" spellcheck="false" placeholder="hk_...">
+          <input class="girdi mono gizli-girdi" id="api-anahtar" type="text" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" placeholder="hk_...">
         </label>
         <label class="alan">MapTiler anahtarı (isteğe bağlı: hibrit, uydu, sokak, ayrıntılı)
-          <input class="girdi mono" id="mt-anahtar" type="password" autocomplete="off" spellcheck="false">
+          <input class="girdi mono gizli-girdi" id="mt-anahtar" type="text" autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false">
         </label>
         <div class="satir">
           <button class="dugme" id="baglan" type="button">Kaydet ve bağlan</button>
@@ -147,6 +147,6 @@
   </div>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="deneme.js?v=261031.1334"></script>
+  <script type="module" src="deneme.js?v=261031.1352"></script>
 </body>
 </html>
