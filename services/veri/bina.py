@@ -13,6 +13,8 @@ from pathlib import Path
 import osmium
 import psycopg
 
+from adres import MAHALLE_HAZIRLA
+
 log = logging.getLogger("bina")
 
 BINA_KULLANIMLARI = {"apartments", "residential", "commercial", "office", "retail", "industrial", "dormitory", "hotel"}
@@ -81,7 +83,7 @@ ISLEM_SQL = [
     "DELETE FROM gecici_bina WHERE geom IS NULL OR NOT ST_IsClosed(geom) OR ST_NPoints(geom) < 4",
     """INSERT INTO bina (tur_id, kullanim_id, kaynak_anahtari, ad, ad_arama, sinir, merkez, mahalle_id, surum_id, aktif_mi)
        SELECT g.tur_id, g.kullanim_id, g.kaynak_anahtari, g.ad, g.ad_arama, g.poligon::geography, g.merkez::geography,
-              (SELECT y.id FROM yerlesim y WHERE y.tur_id = 3 AND y.aktif_mi AND ST_Covers(y.sinir, g.merkez::geography) LIMIT 1), %(surum)s, TRUE
+              (SELECT m.id FROM gecici_mahalle m WHERE ST_Covers(m.g, g.merkez::geometry) LIMIT 1), %(surum)s, TRUE
          FROM (SELECT *, ST_MakePolygon(geom) AS poligon, ST_PointOnSurface(ST_MakePolygon(geom)) AS merkez
                  FROM gecici_bina WHERE ST_IsValid(ST_MakePolygon(geom))) g
        ON CONFLICT (kaynak_anahtari) DO UPDATE SET tur_id = EXCLUDED.tur_id, kullanim_id = EXCLUDED.kullanim_id, ad = EXCLUDED.ad,
@@ -137,6 +139,9 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
             indeks.unlink(missing_ok=True)
         toplayici.bosalt()
         log.info("Okuma bitti: %s adli bina / site. Esleme basliyor...", toplayici.sayac)
+        for sorgu in MAHALLE_HAZIRLA:
+            baglanti.execute(sorgu)
+        baglanti.commit()
         for sorgu in ISLEM_SQL:
             baglanti.execute(sorgu, {"surum": surum})
             baglanti.commit()

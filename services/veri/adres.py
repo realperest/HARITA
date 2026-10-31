@@ -139,13 +139,21 @@ GECICI_SEMA = [
     "CREATE UNLOGGED TABLE IF NOT EXISTS gecici_kapi (kaynak_anahtari text, kapi_no text, kapi_no_arama text, sokak_ad text, sokak_ad_arama text, lon float8, lat float8)",
 ]
 
-MAHALLE_BUL = """(SELECT y.id FROM yerlesim y WHERE y.tur_id = 3 AND y.aktif_mi AND ST_Covers(y.sinir, {nokta}) LIMIT 1)"""
+# Mahalle eslemesi geography yerine geometry + GiST dizinli gecici tabloda yapilir (Turkiye olceginde cok daha hizli)
+MAHALLE_HAZIRLA = [
+    "DROP TABLE IF EXISTS gecici_mahalle",
+    "CREATE UNLOGGED TABLE gecici_mahalle AS SELECT id, sinir::geometry AS g FROM yerlesim WHERE tur_id = 3 AND aktif_mi AND sinir IS NOT NULL",
+    "CREATE INDEX ix_gecici_mahalle_g ON gecici_mahalle USING gist (g)",
+    "ANALYZE gecici_mahalle",
+]
+
+MAHALLE_BUL = """(SELECT m.id FROM gecici_mahalle m WHERE ST_Covers(m.g, ({nokta})::geometry) LIMIT 1)"""
 
 ISLEM_SQL = [
     # 1) sokak parcalarinin geometrisi ve mahallesi
     "UPDATE gecici_sokak_parca SET geom = ST_SetSRID(ST_GeomFromWKB(decode(wkb, 'hex')), 4326), wkb = NULL",
     "DELETE FROM gecici_sokak_parca WHERE geom IS NULL OR ST_NPoints(geom) < 2",
-    "UPDATE gecici_sokak_parca SET mahalle_id = " + MAHALLE_BUL.format(nokta="ST_LineInterpolatePoint(geom, 0.5)::geography"),
+    "UPDATE gecici_sokak_parca SET mahalle_id = " + MAHALLE_BUL.format(nokta="ST_LineInterpolatePoint(geom, 0.5)"),
     # 2) ayni mahalle + ayni ad = tek sokak
     """INSERT INTO sokak (kaynak_anahtari, ad, ad_arama, sinif_id, mahalle_id, cizgi, merkez, surum_id, aktif_mi)
        SELECT 'sokak:' || COALESCE(mahalle_id::text, '0') || ':' || ad_arama, min(ad), ad_arama, min(sinif_id), mahalle_id,
@@ -221,6 +229,9 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
         toplayici.bosalt()
         log.info("Okuma bitti: sokak parcasi=%s yer=%s kapi=%s. Eslestirme basliyor...", *toplayici.sayac.values())
 
+        for sorgu in MAHALLE_HAZIRLA:
+            baglanti.execute(sorgu)
+        baglanti.commit()
         for sorgu in ISLEM_SQL:
             baglanti.execute(sorgu, {"surum": surum})
             baglanti.commit()
