@@ -259,3 +259,7 @@ body {
 /* Boyanan alan (il / ilce / mahalle) secim dugmeleri */
 .boya-dugmeleri { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .boya-dugmeleri .dugme.aktif { border-color: var(--vurgu); color: var(--vurgu); }
+
+/* Veritabani aracina baglanti */
+.arac-baglanti { color: var(--ikincil); text-decoration: none; }
+.arac-baglanti:hover { text-decoration: underline; }
