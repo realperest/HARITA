@@ -31,3 +31,10 @@ Bunu ileride zamanlanmis isle otomatiklestirmek ayri bir gelistirmedir.
 curl -X POST https://HARITA-API/yonetim/projeler -H "X-Yonetim-Anahtari: $YONETIM" -H "Content-Type: application/json" \
   -d '{"ad":"siparis","kaynaklar":["https://musteri.lezzetsepeti.net","https://isletme.lezzetsepeti.net"]}'
 ```
+
+## Veritabani yonetimi (Adminer)
+
+Coolify'da `harita-adminer` uygulamasi (`adminer:5-standalone`): https://harita-adminer.89.45.45.152.sslip.io
+Giris: sistem PostgreSQL, sunucu `mjvz7cconglhimakyiainj6q` (harita-db, ic ag; hazir dolu gelir), kullanici `harita`, veritabani `harita`,
+sifre Coolify'da `harita` uygulamasinin `DB_SIFRE` degiskeni. Veritabani (`harita-db`) ve Redis (`harita-redis`) ayri Coolify kaynaklaridir;
+`harita` compose uygulamasi Coolify ortak agina baglanir ("Predefined network" ayari).
