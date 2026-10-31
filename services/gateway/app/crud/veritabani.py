@@ -174,4 +174,5 @@ async def sql_calistir(sorgu: str) -> dict:
             raise VeritabaniHatasi(f"Sorgu hatasi: {str(hata).splitlines()[0][:300]}") from hata
     kolonlar = list(satirlar[0].keys()) if satirlar else []
     kesildi = len(satirlar) > SQL_SATIR_SINIRI
-    return {"kolonlar": kolonlar, "satirlar": [[_kisalt(s[k]) for k in kolonlar] for s in satirlar[:SQL_SATIR_SINIRI]], "kesildi": kesildi}
+    # Degerler sirayla okunur: ayni adli kolonlar (or. iki "count") ad ile okununca hep ilkinin degeri donuyordu
+    return {"kolonlar": kolonlar, "satirlar": [[_kisalt(d) for d in s.values()] for s in satirlar[:SQL_SATIR_SINIRI]], "kesildi": kesildi}

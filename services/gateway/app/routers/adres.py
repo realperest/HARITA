@@ -1,5 +1,6 @@
 """Adres uclari: birlesik arama, ters arama, sokak, kapi numarasi ve onemli yerler (tum Turkiye, OSM)."""
 
+import asyncio
 import math
 from typing import Literal
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.crud import adres as adres_crud
+from app.crud import adres_ayristir as adres_ayristir_crud
 from app.crud import yerlesim as yerlesim_crud
 from app.security import yetki
 
@@ -41,6 +43,37 @@ class KaynakIstek(BaseModel):
     """OSM kaynak anahtarlari (osm:node:123, osm:way:456, osm:relation:789, sokak:...). En fazla 500."""
 
     anahtarlar: list[str] = Field(min_length=1, max_length=500)
+
+
+class AyristirIstek(BaseModel):
+    """Serbest adres metni (tek) ya da metinler (en fazla 100). Baglam: isletme / kullanici konumu ya da ilce kimligi;
+    metinde il / ilce yazilmadiginda arama bu cevrede yapilir."""
+
+    metin: str | None = Field(default=None, min_length=3, max_length=500)
+    metinler: list[str] | None = Field(default=None, min_length=1, max_length=100)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
+    ilce_id: int | None = None
+
+
+@router.post("/ayristir")
+async def ayristir(istek: AyristirIstek, _proje: dict = Depends(yetki("adres"))) -> dict | list[dict]:
+    """Serbest yazilmis adresi parcalarina ayirir (il, ilce, mahalle / koy, sokak, kapi no, bina / site, blok, kat, daire,
+    posta kodu, tarif), adres veritabaniyla dogrular, yazim farklarini duzeltir, konum ve 0-100 guven puani verir.
+    'metin' verilirse tek sonuc, 'metinler' verilirse ayni sirada liste doner."""
+    if bool(istek.metin) == bool(istek.metinler):
+        raise HTTPException(status_code=422, detail="'metin' ya da 'metinler' alanlarindan biri verilmeli.")
+    baglam = {"lat": istek.lat, "lon": istek.lon, "ilce_id": istek.ilce_id} if (istek.lat is not None and istek.lon is not None) \
+        else {"ilce_id": istek.ilce_id}
+    if istek.metin:
+        return await adres_ayristir_crud.ayristir_ve_dogrula(istek.metin, baglam)
+    sinir = asyncio.Semaphore(4)
+
+    async def tek(m: str) -> dict:
+        async with sinir:
+            return await adres_ayristir_crud.ayristir_ve_dogrula(m, baglam)
+
+    return list(await asyncio.gather(*(tek(m) for m in istek.metinler)))
 
 
 @router.post("/toplu")

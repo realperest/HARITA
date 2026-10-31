@@ -99,6 +99,31 @@ async def test_en_yakin_kapi(istemci, adres_tohum):  # noqa: F811
     assert yok.status_code == 404
 
 
+async def test_adres_ayristirma_ucu(istemci, tohum, adres_tohum):  # noqa: F811
+    b = await baslik(istemci)
+    v = (await istemci.post("/v1/adres/ayristir", headers=b, json={
+        "metin": "cumhuriyet mh namık kemal blv. no 12 d 5 kat 2 güneş apt çorlu tekirdağ 0532 111 22 33"})).json()
+    p = v["parcalar"]
+    assert p["il"]["ad"] == "Tekirdağ" and p["ilce"]["ad"] == "Çorlu" and p["mahalle"]["ad"] == "Cumhuriyet Mahallesi"
+    assert p["sokak"]["id"] == adres_tohum["sokak"] and p["kapi_no"]["durum"] == "dogrulandi" and p["daire"] == "5" and p["kat"] == "2"
+    assert p["bina"]["id"] == adres_tohum["bina"]
+    assert v["konum"]["kesinlik"] == "kapi" and v["puan"] == 100 and v["uyarilar"]
+    assert v["duzgun"].startswith("Cumhuriyet Mahallesi, Namık Kemal Bulvarı No: 12")
+    # Tek harf yazim hatasi uzun adda kesin sayilir; daha cok hata "benzer" olur ve puan onay onerecek kadar duser
+    tek = (await istemci.post("/v1/adres/ayristir", headers=b, json={"metin": "Namk Kemal Bulvari no 12 corlu"})).json()
+    assert tek["parcalar"]["sokak"]["id"] == adres_tohum["sokak"]
+    hatali = (await istemci.post("/v1/adres/ayristir", headers=b, json={"metin": "Nmk Kemel Bulvari no 12 corlu"})).json()
+    assert hatali["parcalar"]["sokak"]["id"] == adres_tohum["sokak"] and hatali["parcalar"]["sokak"]["durum"] == "benzer" and hatali["puan"] < 85
+    assert any(o["alan"] == "sokak_yazimi" for o in hatali["oneriler"])
+    # Baglam konumuyla ilce yazmadan
+    baglamli = (await istemci.post("/v1/adres/ayristir", headers=b, json={"metin": "namik kemal bulvari 12", "lat": 41.16, "lon": 27.805})).json()
+    assert baglamli["parcalar"]["kapi_no"]["durum"] == "dogrulandi"
+    # Toplu
+    liste = (await istemci.post("/v1/adres/ayristir", headers=b, json={"metinler": ["namik kemal bulvari 12 corlu", "olmayan sokak 5 corlu"]})).json()
+    assert len(liste) == 2 and liste[0]["puan"] >= 85 and liste[1]["parcalar"]["sokak"]["durum"] in ("bulunamadi", "benzer")
+    assert (await istemci.post("/v1/adres/ayristir", headers=b, json={})).status_code == 422
+
+
 @respx.mock
 async def test_baglanti_coz_kisa_baglanti(istemci):
     b = await baslik(istemci)

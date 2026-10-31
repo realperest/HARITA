@@ -135,6 +135,18 @@ class HaritaIstemcisi:
         return await self._istek("GET", "/v1/adres/ara", {"q": metin, "tur": tur, "ust_id": ust_id, "lat": n.get("lat"),
                                                           "lon": n.get("lon"), "limit": limit, "yaricap_m": yaricap_m})
 
+    async def adres_ayristir(self, metin: str | list[str], baglam: Nokta | None = None, ilce_id: int | None = None) -> dict | list[dict]:
+        """Serbest yazilmis adresi ayristirir ve dogrular: parcalar (il, ilce, mahalle, sokak, kapi, bina, blok, kat, daire,
+        posta kodu, tarif), duzgun adres, konum (kesinlik: kapi | bina | sokak | mahalle_koy | ilce | il), 0-100 puan, oneriler.
+        Puan 85 ve ustu otomatik kabul edilebilir; altinda kullaniciya onaylatin. Liste verilirse (en fazla 100) liste doner.
+        baglam: isletme / kullanici konumu (metinde ilce yoksa o cevrede aranir)."""
+        govde: dict[str, Any] = {"metinler": metin} if isinstance(metin, list) else {"metin": metin}
+        if baglam:
+            govde.update(_nokta(baglam))
+        if ilce_id:
+            govde["ilce_id"] = ilce_id
+        return await self._istek("POST", "/v1/adres/ayristir", govde=govde)
+
     async def toplu(self, ogeler: Iterable[tuple[str, int]]) -> list[dict]:
         """(tur, id) ogeleri tek istekte: ad, adres, zincir kimlikleri (ust) ve kaynak anahtari. En fazla 500.
         tur: sokak, kapi, yer, bina ya da il, ilce, mahalle_koy ... Bulunamayan oge donmez."""

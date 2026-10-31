@@ -105,6 +105,18 @@ export function adresAra(apiAdresi, anahtar, metin, { tur, ustId, lat, lon, limi
   return istek(apiAdresi, anahtar, `/v1/adres/ara?${sorgu({ q: metin, tur, ust_id: ustId, lat, lon, limit, yaricap_m: yaricapM })}`);
 }
 
+/**
+ * Serbest yazilmis adresi ayristirir ve dogrular (parcalar, duzgun adres, konum, 0-100 puan, oneriler).
+ * metin: tek metin ya da metin dizisi (en fazla 100). Puan 85 ve ustu otomatik kabul edilebilir; altinda kullaniciya onaylatin.
+ * baglam: {lat, lon} isletme / kullanici konumu ya da {ilceId}.
+ */
+export function adresAyristir(apiAdresi, anahtar, metin, { lat, lon, ilceId } = {}) {
+  const govde = Array.isArray(metin) ? { metinler: metin } : { metin };
+  if (lat !== undefined && lon !== undefined) Object.assign(govde, { lat, lon });
+  if (ilceId) govde.ilce_id = ilceId;
+  return istek(apiAdresi, anahtar, '/v1/adres/ayristir', { method: 'POST', body: JSON.stringify(govde) });
+}
+
 /** (tur, id) ogeleri tek istekte: [{tur, id}, ...] (en fazla 500). Ad, adres, zincir kimlikleri (ust) ve kaynak anahtari doner. */
 export function toplu(apiAdresi, anahtar, ogeler) {
   return istek(apiAdresi, anahtar, '/v1/adres/toplu', { method: 'POST', body: JSON.stringify({ ogeler }) });
@@ -210,6 +222,7 @@ export class HaritaIstemcisi {
   sekil(tur, id) { return sekil(this.apiAdresi, this.anahtar, tur, id); }
   valhalla(uc, govde) { return valhalla(this.apiAdresi, this.anahtar, uc, govde); }
   adimAdimRota(noktalar, costing) { return adimAdimRota(this.apiAdresi, this.anahtar, noktalar, costing); }
+  adresAyristir(metin, baglam) { return adresAyristir(this.apiAdresi, this.anahtar, metin, baglam); }
   toplu(ogeler) { return toplu(this.apiAdresi, this.anahtar, ogeler); }
   kaynaktan(anahtarlar) { return kaynaktan(this.apiAdresi, this.anahtar, anahtarlar); }
   enYakinKapi(sokakId, lat, lon, yaricapM) { return enYakinKapi(this.apiAdresi, this.anahtar, sokakId, lat, lon, yaricapM); }
