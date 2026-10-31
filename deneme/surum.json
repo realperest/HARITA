@@ -1,4 +1,5 @@
 [
+  {"surum": "261031.1200", "not": "Rotada her bacak (A-B, B-C...) ayri renk; hastane, akaryakit, banka, otel, eczane katmanlari"},
   {"surum": "261031.1110", "not": "Konumumu bul dugmesi (MapLibre ve Leaflet), karma katmanda ince yollar soluk"},
   {"surum": "261031.1040", "not": "Karma katman: acik renk yollar, beyaz konturlu yazilar (uydu uzerinde okunur)"},
   {"surum": "261031.1010", "not": "Hibrit katman MapTiler hybrid-v4 (Satellite Hybrid) oldu"},

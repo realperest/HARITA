@@ -202,6 +202,31 @@ function ozellik(geometri) {
   return geometri ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: geometri, properties: {} }] } : BOS_KOLEKSIYON;
 }
 
+/** Protomaps stilinin cizmedigi onemli yer turleri (saglik, akaryakit, banka, konaklama, kamu); veri karoda zaten var. */
+const EK_POI_GRUPLARI = [
+  { renk: '#F85149', turler: ['hospital', 'clinic', 'pharmacy', 'dentist', 'doctors', 'veterinary'] },
+  { renk: '#F0883E', turler: ['fuel', 'charging_station', 'gas'] },
+  { renk: '#3FB950', turler: ['bank', 'atm', 'bureau_de_change'] },
+  { renk: '#BC8CFF', turler: ['hotel', 'hostel', 'motel', 'guest_house'] },
+  { renk: '#58A6FF', turler: ['police', 'fire_station', 'courthouse', 'townhall'] },
+  { renk: '#39C5CF', turler: ['place_of_worship'] },
+];
+
+function ekPoiKatmanlari(koyu) {
+  const turler = EK_POI_GRUPLARI.flatMap((g) => g.turler);
+  const renkEsle = ['match', ['get', 'kind'], ...EK_POI_GRUPLARI.flatMap((g) => [g.turler, g.renk]), '#888888'];
+  const filtre = ['all', ['in', ['get', 'kind'], ['literal', turler]], ['>=', ['zoom'], ['-', ['get', 'min_zoom'], 1]]];
+  return [
+    { id: 'ek-poi-nokta', type: 'circle', source: 'harita', 'source-layer': 'pois', filter: filtre,
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 3, 17, 6], 'circle-color': renkEsle,
+        'circle-stroke-color': koyu ? '#0E1116' : '#FFFFFF', 'circle-stroke-width': 1.5 } },
+    { id: 'ek-poi-ad', type: 'symbol', source: 'harita', 'source-layer': 'pois', filter: filtre, minzoom: 14,
+      layout: { 'text-field': ['coalesce', ['get', 'name:tr'], ['get', 'name']], 'text-font': ['Noto Sans Regular'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 14, 10, 19, 14], 'text-offset': [0.9, 0], 'text-anchor': 'left', 'text-max-width': 8 },
+      paint: { 'text-color': koyu ? '#FFFFFF' : '#1F2328', 'text-halo-color': koyu ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)', 'text-halo-width': 1.5 } },
+  ];
+}
+
 /** Karma katman: uydu uzerinde okunur olsun diye yollar acik renk, yazilar beyaz ve koyu konturlu. */
 function karmaKatmanlari() {
   const tum = layers('harita', namedFlavor('dark'), { lang: 'tr' });
@@ -227,12 +252,12 @@ function stilKur(k) {
   let sprite = 'dark';
   if (k.tur === 'vektor') {
     sprite = k.tema;
-    katmanlar = layers('harita', namedFlavor(k.tema), { lang: 'tr' });
+    katmanlar = [...layers('harita', namedFlavor(k.tema), { lang: 'tr' }), ...ekPoiKatmanlari(['dark', 'black'].includes(k.tema))];
   } else {
     kaynaklar.zemin = { type: 'raster', tiles: [mtAdres(k)], tileSize: 512, maxzoom: 20, attribution: MT_ATIF };
     katmanlar = [{ id: 'zemin', type: 'raster', source: 'zemin' }];
     if (k.tur === 'karma') {
-      katmanlar.push(...karmaKatmanlari());
+      katmanlar.push(...karmaKatmanlari(), ...ekPoiKatmanlari(true));
     }
   }
   return { version: 8, glyphs: yap.yaziTipleri, sprite: `${yap.simgeler}/${sprite}`, sources: kaynaklar, layers: katmanlar };
@@ -774,14 +799,19 @@ function rotaListesiYaz() {
 }
 
 async function rotaCiz() {
-  if (durum.veri.duraklar.length < 2) { mesaj('rota-mesaj', 'En az 2 durak gerekli.', 'uyari'); return; }
+  const duraklar = noktalar();
+  if (duraklar.length < 2) { mesaj('rota-mesaj', 'En az 2 durak gerekli.', 'uyari'); return; }
   mesaj('rota-mesaj', 'Hesaplanıyor...');
   try {
     const profil = $('rota-profil').value;
-    const v = await api('/v1/rota', { method: 'POST', body: JSON.stringify({ noktalar: noktalar(), profil, geometri: true }) });
+    const profilAd = $('rota-profil').selectedOptions[0].textContent;
+    // Her bacak (A-B, B-C, C-D ...) ayri istek ve ayri renk
+    const bacaklar = await Promise.all(duraklar.slice(0, -1).map((bas, i) => api('/v1/rota', {
+      method: 'POST', body: JSON.stringify({ noktalar: [bas, duraklar[i + 1]], profil, geometri: true }) })));
     mesaj('rota-mesaj', '');
-    rotaEkle({ geometri: v.geometri, mesafe_m: v.mesafe_m, sure_sn: v.sure_sn, baslik: $('rota-profil').selectedOptions[0].textContent });
-    if (v.geometri) motor.sigdir(geometriKutusu(v.geometri));
+    bacaklar.forEach((v, i) => rotaEkle({ geometri: v.geometri, mesafe_m: v.mesafe_m, sure_sn: v.sure_sn, baslik: `${harf(i)} → ${harf(i + 1)} · ${profilAd}` }));
+    const tum = bacaklar.flatMap((v) => (v.geometri ? v.geometri.coordinates : []));
+    if (tum.length) motor.sigdir(geometriKutusu({ coordinates: tum }));
   } catch (hata) {
     mesaj('rota-mesaj', hata instanceof HataMesaji ? hata.message : 'Rota hesaplanamadı.', 'hata');
   }
@@ -817,11 +847,12 @@ async function optimizeRota() {
   try {
     const v = await api('/valhalla/optimized_route', { method: 'POST', body: JSON.stringify({
       locations: noktalar(), costing: COSTING[$('rota-profil').value], directions_options: { units: 'kilometers' } }) });
+    const sirali = (v.trip.locations || []).map((k) => harf(k.original_index));
     const koordinatlar = v.trip.legs.flatMap((b) => polylineCoz(b.shape, 6));
-    const sira = (v.trip.locations || []).map((k) => harf(k.original_index)).join(' → ');
     mesaj('rota-mesaj', '');
-    rotaEkle({ geometri: { type: 'LineString', coordinates: koordinatlar }, mesafe_m: v.trip.summary.length * 1000, sure_sn: v.trip.summary.time,
-      baslik: 'Optimize', not: `Sıra: ${sira}` });
+    v.trip.legs.forEach((b, i) => rotaEkle({
+      geometri: { type: 'LineString', coordinates: polylineCoz(b.shape, 6) }, mesafe_m: b.summary.length * 1000, sure_sn: b.summary.time,
+      baslik: `Optimize ${sirali[i] || '?'} → ${sirali[i + 1] || '?'}`, not: i === 0 ? `Sıra: ${sirali.join(' → ')}` : '' }));
     motor.sigdir(geometriKutusu({ coordinates: koordinatlar }));
   } catch (hata) {
     mesaj('rota-mesaj', hata instanceof HataMesaji ? hata.message : 'Optimize edilemedi.', 'hata');
