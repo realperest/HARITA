@@ -389,11 +389,15 @@ def calistir() -> None:
 
     @kontrol("adres: ilceye bagli (mahallesiz) sokaklar")
     def _():
-        y = api("GET", f"/v1/adres/alt?ust=ilce:{paylasim['ilce']}&cocuk=sokak&limit=1000")
+        # Duzce Merkez: mahalle sinirlari disinda kalan cok yol var (yuklemeden sonra 1.000+)
+        ilce = api("GET", "/v1/yerlesim/ara?" + urllib.parse.urlencode({"q": "düzce merkez", "tur": "ilce"})).json()[0]["id"]
+        y = api("GET", f"/v1/adres/alt?ust=ilce:{ilce}&cocuk=sokak&limit=1000")
         esit(y)
         v = y.json()
-        assert all(x["tur"] == "sokak" for x in v), "sokak disi oge dondu"
-        return f"{len(v)} yol"
+        assert v and all(x["tur"] == "sokak" and x["ust"]["ilce_id"] == ilce for x in v), "ilceye bagli yol yok ya da yanlis"
+        bulunan = api("GET", "/v1/adres/ara?" + urllib.parse.urlencode({"q": v[0]["ad"], "tur": "sokak", "ust_id": ilce})).json()
+        assert any(x["id"] == v[0]["id"] for x in bulunan), "ilce filtreli aramada bulunamadi"
+        return f"Duzce Merkez: {len(v)} yol"
 
     @kontrol("adres: toplu getirme ve kaynak anahtari")
     def _():
