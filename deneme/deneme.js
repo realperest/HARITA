@@ -312,7 +312,7 @@ class MapLibreMotoru {
     }
     h.addLayer({ id: 'izokron-dolgu', type: 'fill', source: 'izokron', paint: { 'fill-color': ['get', 'renk'], 'fill-opacity': 0.16 } });
     h.addLayer({ id: 'izokron-cizgi', type: 'line', source: 'izokron', paint: { 'line-color': ['get', 'renk'], 'line-width': 2 } });
-    h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#F5A623', 'fill-opacity': 0.15 } });
+    h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#F5A623', 'fill-opacity': 0.08 } });
     h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#F5A623', 'line-width': 2 } });
     // Rota bacaklari: ic ice kalinlik (ust uste binince hepsi gorunur), beyaz kenar ve yon oklari
     h.addLayer({
@@ -510,7 +510,7 @@ class LeafletMotoru {
     this.sinirKatman.clearLayers();
     if (geometri) {
       window.L.geoJSON({ type: 'Feature', geometry: geometri, properties: {} },
-        { style: { color: '#F5A623', weight: 2, fillColor: '#F5A623', fillOpacity: 0.15 }, interactive: false }).addTo(this.sinirKatman);
+        { style: { color: '#F5A623', weight: 2, fillColor: '#F5A623', fillOpacity: 0.08 }, interactive: false }).addTo(this.sinirKatman);
     }
   }
 
