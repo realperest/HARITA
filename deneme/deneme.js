@@ -223,7 +223,7 @@ function ozellik(geometri) {
   return geometri ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: geometri, properties: {} }] } : BOS_KOLEKSIYON;
 }
 
-/** Protomaps stilinin cizmedigi onemli yer turleri (saglik, akaryakit, banka, konaklama, kamu); veri karoda zaten var. */
+/** Protomaps stilinin cizmedigi onemli yer turleri (saglik, akaryakit, banka, konaklama, kamu); veri karoda zaten var. Varsayilan gizli, Yerler kutusuyla acilir; aramada her zaman bulunur. */
 const EK_POI_GRUPLARI = [
   { renk: '#F85149', turler: ['hospital', 'clinic', 'pharmacy', 'dentist', 'doctors', 'veterinary'] },
   { renk: '#F0883E', turler: ['fuel', 'charging_station', 'gas'] },
@@ -236,13 +236,14 @@ const EK_POI_GRUPLARI = [
 function ekPoiKatmanlari(koyu) {
   const turler = EK_POI_GRUPLARI.flatMap((g) => g.turler);
   const renkEsle = ['match', ['get', 'kind'], ...EK_POI_GRUPLARI.flatMap((g) => [g.turler, g.renk]), '#888888'];
+  const gorunum = durum.yerGoster ? 'visible' : 'none';
   const filtre = ['all', ['in', ['get', 'kind'], ['literal', turler]], ['>=', ['zoom'], ['-', ['get', 'min_zoom'], 1]]];
   return [
-    { id: 'ek-poi-nokta', type: 'circle', source: 'harita', 'source-layer': 'pois', filter: filtre,
+    { id: 'ek-poi-nokta', type: 'circle', source: 'harita', 'source-layer': 'pois', filter: filtre, layout: { visibility: gorunum },
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 3, 17, 6], 'circle-color': renkEsle,
         'circle-stroke-color': koyu ? '#0E1116' : '#FFFFFF', 'circle-stroke-width': 1.5 } },
     { id: 'ek-poi-ad', type: 'symbol', source: 'harita', 'source-layer': 'pois', filter: filtre, minzoom: 14,
-      layout: { 'text-field': ['coalesce', ['get', 'name:tr'], ['get', 'name']], 'text-font': ['Noto Sans Regular'],
+      layout: { visibility: gorunum, 'text-field': ['coalesce', ['get', 'name:tr'], ['get', 'name']], 'text-font': ['Noto Sans Regular'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 14, 10, 19, 14], 'text-offset': [0.9, 0], 'text-anchor': 'left', 'text-max-width': 8 },
       paint: { 'text-color': koyu ? '#FFFFFF' : '#1F2328', 'text-halo-color': koyu ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)', 'text-halo-width': 1.5 } },
   ];
@@ -392,6 +393,13 @@ class MapLibreMotoru {
   }
 
   yerler(fc) { this.veri.yerler = fc; this.veriYaz('yerler', fc || BOS_KOLEKSIYON); }
+
+  /** Karodaki ek yer (POI) katmanlarini acar / kapatir. */
+  ekPoiGoster(ac) {
+    for (const id of ['ek-poi-nokta', 'ek-poi-ad']) {
+      if (this.h.getLayer(id)) this.h.setLayoutProperty(id, 'visibility', ac ? 'visible' : 'none');
+    }
+  }
   izokron(fc) { this.veri.izokron = fc; this.veriYaz('izokron', fc || BOS_KOLEKSIYON); }
 
   yakin(liste) {
@@ -1135,6 +1143,8 @@ async function izokronHesapla() {
 
 /** Gorunen harita kutusundaki yer isaretlerini cizer (yakinlastirma >= 14). */
 async function yerKatmaniYukle() {
+  durum.yerGoster = $('yer-katmani').checked;
+  motor.ekPoiGoster?.(durum.yerGoster);
   if (!$('yer-katmani').checked) { motor.yerler(null); return; }
   if (motor.goruntu().zoom < 14) { motor.yerler(null); mesaj('baglanti-mesaj', 'Yerleri görmek için haritayı yakınlaştırın (z14+).', 'uyari'); return; }
   try {
