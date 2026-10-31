@@ -1,38 +1,9 @@
 # HARITA: tum projelerin ortak harita servisi (karo + rota + adres arama + anahtar kapisi).
 # Coolify'da "Docker Compose" kaynagi olarak yayinlanir. Gizli degerler Coolify ortam degiskenlerinden gelir.
+# Veritabani (PostGIS) ve Redis Coolify'in kendi kaynaklari olarak ayri calisir (harita-db, harita-redis); bu uygulama Coolify aginin ortak aginda onlara baglanir.
 # Alan adlari: tiles -> karo alan adi, gateway -> API alan adi (Coolify panelinde atanir). Diger servisler yalniz ic aginda.
 
 services:
-  db:
-    mem_limit: 2g
-    # PostGIS: anahtar kayitlari + yerlesim (il / ilce / mahalle-koy) verisi
-    image: postgis/postgis:17-3.5
-    restart: unless-stopped
-    # Buyuk adres yuklemesi icin (milyonlarca satir): daha cok bellek ve seyrek kontrol noktasi
-    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "max_wal_size=4GB", "-c", "maintenance_work_mem=256MB", "-c", "work_mem=32MB"]
-    environment:
-      POSTGRES_DB: harita
-      POSTGRES_USER: harita
-      POSTGRES_PASSWORD: ${DB_SIFRE:?DB_SIFRE gerekli}
-    volumes:
-      - harita_pg:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U harita -d harita"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    mem_limit: 256m
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   # Vektor karolar (PMTiles) + yazi tipleri + simgeler. Ilk acilista Protomaps gunluk yapisindan Turkiye kesitini indirir.
   tiles:
     mem_limit: 1g
@@ -76,11 +47,8 @@ services:
     cpus: 1.0
     build: ./services/veri
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://harita:${DB_SIFRE:?DB_SIFRE gerekli}@db:5432/harita
+      DATABASE_URL: postgresql://harita:${DB_SIFRE:?DB_SIFRE gerekli}@${DB_ADRESI:-mjvz7cconglhimakyiainj6q}:5432/harita
       VERI_ADRESI: ${OSM_VERI_ADRESI:-https://download.geofabrik.de/europe/turkey-latest.osm.pbf}
       GUNCELLEME_GUN: ${GUNCELLEME_GUN:-30}
     volumes:
@@ -92,14 +60,9 @@ services:
     cpus: 1.0
     build: ./services/gateway
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://harita:${DB_SIFRE:?DB_SIFRE gerekli}@db:5432/harita
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://harita:${DB_SIFRE:?DB_SIFRE gerekli}@${DB_ADRESI:-mjvz7cconglhimakyiainj6q}:5432/harita
+      REDIS_URL: redis://default:${REDIS_SIFRE:?REDIS_SIFRE gerekli}@${REDIS_ADRESI:-95hm6k1qwzorg8isilwivryt}:6379/0
       YONETIM_ANAHTARI: ${YONETIM_ANAHTARI:?YONETIM_ANAHTARI gerekli}
       ROTA_ADRESI: http://rota:8002
       KARO_ADRESI: ${KARO_GENEL_ADRESI:?KARO_GENEL_ADRESI gerekli}
@@ -108,7 +71,6 @@ services:
       - "8000"
 
 volumes:
-  harita_pg:
   harita_veri:
   harita_karo:
   harita_rota2:
