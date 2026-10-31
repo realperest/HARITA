@@ -1,8 +1,9 @@
 [
+  {"surum": "261031.1328", "not": "Kayitli harita anahtari gecersizse sunucu anahtariyla otomatik yeniden dener"},
   {"surum": "261031.1600", "not": "Veritabani araci sayfasi (veritabani.html): tablolar, veri, yapi, salt okunur SQL"},
   {"surum": "261031.1500", "not": "Photon kaldirildi; saglik gostergesi kendi adres indeksimize bagli"},
   {"surum": "261031.1400", "not": "Rota bacaklari ic ice kalinlik (zit yonde ortak yolda da hepsi gorunur)"},
-  {"surum": "261031.1330", "not": "Pin ve arama: il, ilce veya mahalle sinirini boyama; rota bacaklari benzersiz kaydirma"},
+  {"surum": "261031.1328", "not": "Pin ve arama: il, ilce veya mahalle sinirini boyama; rota bacaklari benzersiz kaydirma"},
   {"surum": "261031.1245", "not": "Ust uste binen rota bacaklari yan yana (kaydirmali), beyaz kenar ve yon oklari"},
   {"surum": "261031.1200", "not": "Rotada her bacak (A-B, B-C...) ayri renk; hastane, akaryakit, banka, otel, eczane katmanlari"},
   {"surum": "261031.1110", "not": "Konumumu bul dugmesi (MapLibre ve Leaflet), karma katmanda ince yollar soluk"},

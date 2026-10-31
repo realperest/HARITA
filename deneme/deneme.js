@@ -42,6 +42,7 @@ const YER_RENKLERI = {
 const durum = {
   api: VARSAYILAN_API,
   anahtar: '',
+  sunucuAnahtar: '',
   mtAnahtar: '',
   yap: null,
   katmanKod: 'v-dark',
@@ -104,7 +105,13 @@ function depoYaz(veri) {
   }
 }
 
-class HataMesaji extends Error {}
+/** Kullaniciya gosterilecek sade hata; kod, varsa HTTP durum kodudur. */
+class HataMesaji extends Error {
+  constructor(mesaj, kod = 0) {
+    super(mesaj);
+    this.kod = kod;
+  }
+}
 
 const HATA_METNI = {
   401: 'Harita anahtarı geçersiz veya eksik.',
@@ -131,7 +138,7 @@ async function api(yol, secenek = {}) {
   }
   if (!yanit.ok) {
     console.warn('API hata kodu', yanit.status, yol);
-    throw new HataMesaji(HATA_METNI[yanit.status] || 'Beklenmeyen bir hata oluştu.');
+    throw new HataMesaji(HATA_METNI[yanit.status] || 'Beklenmeyen bir hata oluştu.', yanit.status);
   }
   return yanit.json();
 }
@@ -584,7 +591,18 @@ async function baglan() {
   durum.mtAnahtar = $('mt-anahtar').value.trim();
   depoYaz({ api: durum.api, anahtar: durum.anahtar, mtAnahtar: durum.mtAnahtar });
   try {
-    const yap = await api('/v1/yapilandirma');
+    let yap;
+    try {
+      yap = await api('/v1/yapilandirma');
+    } catch (hata) {
+      // Tarayicida kayitli anahtar eskimis olabilir (anahtar yenilendi); sunucudaki anahtarla bir kez daha dene
+      if (!(hata instanceof HataMesaji) || hata.kod !== 401 || !durum.sunucuAnahtar || durum.sunucuAnahtar === durum.anahtar) throw hata;
+      console.warn('Kayitli harita anahtari gecersiz, sunucu anahtari deneniyor');
+      durum.anahtar = durum.sunucuAnahtar;
+      $('api-anahtar').value = durum.anahtar;
+      depoYaz({ anahtar: durum.anahtar });
+      yap = await api('/v1/yapilandirma');
+    }
     durum.yap = { ...varsayilanYapilandirma(), ...yap, yaziTipleri: yap.yaziTipleri, simgeler: yap.simgeler };
     mesaj('baglanti-mesaj', `Bağlandı. Proje: ${yap.proje}`, 'basari');
   } catch (hata) {
@@ -1036,7 +1054,8 @@ async function baslat() {
   const hash = hashOku();
   const sunucu = await sunucuYapilandirmasi();
   durum.api = kayit.api || VARSAYILAN_API;
-  durum.anahtar = hash.anahtar || kayit.anahtar || sunucu.anahtar || '';
+  durum.sunucuAnahtar = sunucu.anahtar || '';
+  durum.anahtar = hash.anahtar || kayit.anahtar || durum.sunucuAnahtar;
   durum.mtAnahtar = (hash.mtAnahtar || kayit.mtAnahtar || sunucu.mtAnahtar || '').replace(/['"\s]/g, '');
   durum.katmanKod = kayit.katmanKod || 'v-dark';
   durum.motorAd = kayit.motorAd || 'maplibre';
