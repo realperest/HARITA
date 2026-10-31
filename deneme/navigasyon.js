@@ -558,15 +558,18 @@ function simgeCiz(m) {
   $('simge-ok').setAttribute('transform', `rotate(${Math.round(aci)})`);
 }
 
+/** Adi olmayan yollarda Valhalla talimati kucuk harfle baslar ("sola donun."); ekranda buyuk harfle baslatir. */
+const buyukBasla = (metin) => (metin ? metin.charAt(0).toLocaleUpperCase('tr-TR') + metin.slice(1) : '');
+
 function manevraKartiYaz(rota, i, kalanM) {
   const m = rota.manevralar[i];
   $('manevra-mesafe').textContent = mesafeYaz(kalanM);
-  $('manevra-metin').textContent = m.instruction;
+  $('manevra-metin').textContent = buyukBasla(m.instruction);
   simgeCiz(m);
   const sonraki = rota.manevralar[i + 1];
   const sonra = $('manevra-sonra');
   if (sonraki && sonraki.basM - m.basM < 300) {
-    sonra.textContent = `Sonra: ${sonraki.instruction}`;
+    sonra.textContent = `Sonra: ${buyukBasla(sonraki.instruction)}`;
     sonra.hidden = false;
   } else sonra.hidden = true;
 }
@@ -791,7 +794,7 @@ async function navBaslat() {
   ekranAcikTut(true);
   const ilk = durum.rota.manevralar[0];
   durum.soylenen.set(`${durum.rota.no}:0`, { uzak: true, yakin: true });
-  soyle(`Navigasyon başladı. ${ilk?.verbal_pre_transition_instruction || ''}`, true);
+  soyle(`Navigasyon başladı. ${buyukBasla(ilk?.verbal_pre_transition_instruction || '')}`, true);
   if (durum.simAcik) simBaslat();
   else konumGeldi({ ...durum.konum });
 }
