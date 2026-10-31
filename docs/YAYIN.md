@@ -4,13 +4,15 @@
 
 1. Coolify: Yeni kaynak -> Public/Private Repository -> `realperest/HARITA` -> Build Pack: **Docker Compose**, dosya `docker-compose.yaml`.
 2. Ortam degiskenleri (`.env.example` ornek): `DB_SIFRE`, `REDIS_SIFRE`, `DB_ADRESI`, `REDIS_ADRESI`, `YONETIM_ANAHTARI`
-   (uzun rastgele), `KARO_GENEL_ADRESI`, `IZINLI_KOKEN_REGEX`.
+   (uzun rastgele), `KARO_GENEL_ADRESI`, `IZINLI_KOKEN_REGEX`. Istege bagli: `HAVA_ADRESI` / `HAVA_ANAHTARI` (ticari Open-Meteo),
+   `CEVRIMDISI_PAKET` (varsayilan True; il paketleri ~1-2 GB ek disk), `PAKET_MAKS_YAKINLASTIRMA` (varsayilan 14).
 3. Veritabani ve Redis ayri Coolify kaynaklaridir (`harita-db` PostGIS 17, `harita-redis` Redis 7); compose uygulamasi
    Coolify ortak agina baglanir ("Predefined network").
 4. Alan adlari: `tiles` servisine karo alan adi (port 8080), `gateway` servisine API alan adi (port 8000).
    Diger servisler alan adi almaz.
 5. Cloudflare: karo alan adini turuncu bulutla onbellege alin (karolar `Cache-Control: public` doner, yuk Cloudflare'de kalir).
-   Ayni sunucudaki diger projeler icin disk ve RAM payini kontrol edin (rota en fazla 6 GB, veri 2 GB, karo 1 GB, gateway 512 MB).
+   Ayni sunucudaki diger projeler icin disk ve RAM payini kontrol edin (rota en fazla 6 GB, veri 2 GB, karo 1 GB, gateway 512 MB,
+   plan 512 MB).
 6. Deneme sayfasi ayri Coolify uygulamasidir (`harita-deneme`, Dockerfile `deneme/`): `MAPTILER_ANAHTAR` ve `HARITA_ANAHTAR`
    (kisitli demo anahtari) ortam degiskenleri.
 

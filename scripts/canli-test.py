@@ -452,6 +452,73 @@ def calistir() -> None:
         assert len(y.json()["noktalar"]) == 2, "nokta sayisi yanlis"
         esit(api("GET", "/v1/baglanti/coz?" + urllib.parse.urlencode({"adres": "https://yabanci.example/x"})), 422)
 
+    # ---------- Ek ozellikler ----------
+    @kontrol("adres: ayristirma (serbest metin)")
+    def _():
+        y = api("POST", "/v1/adres/ayristir", {"metin": "caferaga mah. moda cad. no 10 kadikoy istanbul"})
+        esit(y)
+        v = y.json()
+        assert v["parcalar"]["ilce"]["ad"] and v["konum"], "ilce ya da konum yok"
+        return f"puan {v['puan']}, kesinlik {v['konum']['kesinlik']}: {v['duzgun'][:60]}"
+
+    @kontrol("yol: rota boyunca uyarilar (kamera / kasis)")
+    def _():
+        y = api("POST", "/v1/yol/uyarilar", {"polyline": paylasim["shape"]})
+        esit(y)
+        return f"{len(y.json()['uyarilar'])} uyari"
+
+    @kontrol("yol: rota boyunca hava (Open-Meteo)")
+    def _():
+        y = api("POST", "/v1/yol/hava", {"polyline": paylasim["shape"], "sure_sn": 600})
+        esit(y)
+        n = y.json()["noktalar"]
+        assert n and n[0]["tahmin_var"], "tahmin yok"
+        return f"{n[0]['sicaklik_c']} C, {n[0]['durum']}"
+
+    @kontrol("trafik: ogrenilmis hizla sure")
+    def _():
+        y = api("POST", "/v1/trafik/sure", {"polyline": paylasim["shape"], "profil": "auto"})
+        esit(y)
+        v = y.json()
+        assert v["valhalla_sure_sn"] > 0, "sure yok"
+        return f"{v['valhalla_sure_sn']} sn -> {v['tahmini_sure_sn']} sn, kapsama {v['kapsama']}"
+
+    @kontrol("planlama: en yakin kurye ve VROOM")
+    def _():
+        y = api("POST", "/v1/en-yakin", {"hedef": A, "adaylar": [{"id": "b", "konum": B}, {"id": "c", "konum": C}], "profil": "motosiklet"})
+        esit(y)
+        p = api("POST", "/v1/planla", {"profil": "motosiklet", "araclar": [{"id": "k1", "baslangic": A}, {"id": "k2", "baslangic": C}],
+                                       "gorevler": [{"id": "g1", "konum": B}, {"id": "g2", "konum": C}]}, zaman_asimi=60)
+        esit(p)
+        v = p.json()
+        assert not v["atanamayan"], f"atanamayan: {v['atanamayan']}"
+        return f"en yakin {y.json()['adaylar'][0]['id']}, {v['ozet']['arac_sayisi']} arac"
+
+    @kontrol("paylasim: kod olustur / ac / sil ve GPX")
+    def _():
+        y = api("POST", "/v1/paylasim", {"profil": "araba", "sure_saat": 1, "duraklar": [{**A, "ad": "A"}, B]})
+        esit(y)
+        kod = y.json()["kod"]
+        esit(api("GET", f"/v1/paylasim/{kod}"))
+        esit(api("DELETE", f"/v1/paylasim/{kod}"))
+        g = api("POST", "/v1/gpx/olustur", {"duraklar": [A, B], "polyline": paylasim["shape"]})
+        esit(g)
+        assert b"<trkpt" in g.govde, "GPX izi yok"
+        return kod
+
+    @kontrol("canli: konum yayini ve son konumlar")
+    def _():
+        esit(api("POST", "/v1/canli/canli-test/konum", {"id": "test", **A}))
+        y = api("GET", "/v1/canli/canli-test/konumlar")
+        esit(y)
+        assert any(k["id"] == "test" for k in y.json()), "konum yok"
+
+    @kontrol("cevrimdisi: il paketleri")
+    def _():
+        y = api("GET", "/v1/cevrimdisi/paketler")
+        assert y.durum in (200, 503), f"HTTP {y.durum}"
+        return "hazirlaniyor" if y.durum == 503 else f"{len(y.json()['paketler'])} paket"
+
     # ---------- Uyumlu uclar ----------
     @kontrol("uyumlu: Nominatim search + reverse")
     def _():

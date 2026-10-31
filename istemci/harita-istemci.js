@@ -228,6 +228,122 @@ export class HaritaIstemcisi {
   enYakinKapi(sokakId, lat, lon, yaricapM) { return enYakinKapi(this.apiAdresi, this.anahtar, sokakId, lat, lon, yaricapM); }
   yolBilgisi(lat, lon, secenek) { return yolBilgisi(this.apiAdresi, this.anahtar, lat, lon, secenek); }
   baglantiCoz(adres) { return baglantiCoz(this.apiAdresi, this.anahtar, adres); }
+
+  /** Cizgi govdesi: Valhalla polyline6 metni ya da [[lat, lon], ...]. */
+  static cizgi(c) { return typeof c === 'string' ? { polyline: c } : { noktalar: c }; }
+
+  #post(yol, govde) { return istek(this.apiAdresi, this.anahtar, yol, { method: 'POST', body: JSON.stringify(govde) }); }
+
+  /** Rota boyunca hiz kamerasi / hiz kesici; rota_m: rota basindan uzaklik. */
+  async yolUyarilari(cizgi, { tamponM = 25, turler } = {}) {
+    return (await this.#post('/v1/yol/uyarilar', { ...HaritaIstemcisi.cizgi(cizgi), tampon_m: tamponM, turler })).uyarilar;
+  }
+
+  /** Rota boyunca varis saatindeki hava ve surus uyarilari. */
+  rotaHavasi(cizgi, { sureSn, kalkis } = {}) { return this.#post('/v1/yol/hava', { ...HaritaIstemcisi.cizgi(cizgi), sure_sn: sureSn, kalkis }); }
+
+  /** GPS izi ([{lat, lon, zaman (Unix sn)}], artan sirada) ortak trafik profiline katilir; kimlik saklanmaz. */
+  trafikIzi(noktalar, profil = 'motosiklet') { return this.#post('/v1/trafik/iz', { profil, noktalar }); }
+
+  /** Ogrenilmis yol hizlariyla rota suresi. */
+  trafikSuresi(cizgi, { profil = 'motosiklet', zaman } = {}) { return this.#post('/v1/trafik/sure', { ...HaritaIstemcisi.cizgi(cizgi), profil, zaman }); }
+
+  /** Cok kuryeli planlama (VROOM): {araclar, gorevler, gonderiler, profil, geometri}. */
+  planla(istek) { return this.#post('/v1/planla', { profil: 'motosiklet', gorevler: [], gonderiler: [], ...istek }); }
+
+  /** Adaylari ({id, konum}) hedefe gercek yol suresine gore siralar. */
+  async enYakin(hedef, adaylar, { profil = 'motosiklet', adet = 5 } = {}) {
+    return (await this.#post('/v1/en-yakin', { hedef, adaylar, profil, adet })).adaylar;
+  }
+
+  /** Teslimat konumundan kapi numarasi ogretir (ortak havuz). */
+  kapiOgren(sokakId, kapiNo, lat, lon, dogrulukM) { return this.#post('/v1/adres/kapi-ogren', { sokak_id: sokakId, kapi_no: kapiNo, lat, lon, dogruluk_m: dogrulukM }); }
+
+  kapiOgrenGeriAl(kapiId) { return istek(this.apiAdresi, this.anahtar, `/v1/adres/kapi-ogren/${kapiId}`, { method: 'DELETE' }); }
+
+  /** Duraklari kisa kodla paylasir: {kod, bitis}. */
+  paylasimOlustur(duraklar, { profil = 'araba', ad, sureSaat = 72 } = {}) { return this.#post('/v1/paylasim', { duraklar, profil, ad, sure_saat: sureSaat }); }
+
+  paylasimGetir(kod) { return istek(this.apiAdresi, this.anahtar, `/v1/paylasim/${encodeURIComponent(kod)}`); }
+
+  /** GPX 1.1 metni (duraklar + istege bagli cizgi). */
+  async gpxOlustur(duraklar, { cizgi, ad } = {}) {
+    const yanit = await fetch(`${this.apiAdresi.replace(/\/$/, '')}/v1/gpx/olustur`, {
+      method: 'POST', headers: { [BASLIK]: this.anahtar, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duraklar, ad, ...(cizgi ? HaritaIstemcisi.cizgi(cizgi) : {}) }),
+    });
+    if (!yanit.ok) throw Object.assign(new Error(`Harita servisi hatasi (${yanit.status})`), { durum: yanit.status });
+    return yanit.text();
+  }
+
+  /** GPX metnini okur; izTakip ile duraklara izden ara noktalar eklenir. */
+  gpxOku(metin, { izTakip = false } = {}) {
+    return istek(this.apiAdresi, this.anahtar, `/v1/gpx/oku?iz_takip=${izTakip}`, { method: 'POST', body: metin });
+  }
+
+  canliKonumlar(kanal) { return istek(this.apiAdresi, this.anahtar, `/v1/canli/${encodeURIComponent(kanal)}/konumlar`); }
+
+  canliBolgeler(kanal, bolgeler) {
+    const yol = `/v1/canli/${encodeURIComponent(kanal)}/bolgeler`;
+    return bolgeler ? istek(this.apiAdresi, this.anahtar, yol, { method: 'PUT', body: JSON.stringify(bolgeler) }) : istek(this.apiAdresi, this.anahtar, yol);
+  }
+
+  cevrimdisiPaketler() { return istek(this.apiAdresi, this.anahtar, '/v1/cevrimdisi/paketler'); }
+
+  /** Canli konum baglantisi (WebSocket, kalp atisi ve otomatik yeniden baglanma ile). */
+  canli(kanal, secenek = {}) { return new CanliBaglanti(this.apiAdresi, this.anahtar, kanal, secenek); }
+}
+
+/**
+ * Canli konum WebSocket istemcisi. Sunucu 10 sn'de bir ping gonderir, istemci pong ile yanitlar; ayrica istemci 11 sn'de bir
+ * ping atar. Baglanti duserse 1, 2, 4 ... en fazla 30 sn bekleyip yeniden baglanir ve tekrar giris yapar.
+ * olay(m): {tip: 'konum' | 'bolge' | 'hazir' | 'hata', ...}; dinle=false ise yalniz gonderir (kurye cihazi icin).
+ */
+export class CanliBaglanti {
+  constructor(apiAdresi, anahtar, kanal, { olay = () => {}, dinle = true, durum = () => {} } = {}) {
+    Object.assign(this, { apiAdresi, anahtar, kanal, olay, dinle, durumBildir: durum, bekleme: 1000, kapali: false, ws: null, sayac: null });
+    this.#baglan();
+  }
+
+  #baglan() {
+    const adres = `${this.apiAdresi.replace(/^http/, 'ws').replace(/\/$/, '')}/v1/canli/ws`;
+    const ws = new WebSocket(adres);
+    this.ws = ws;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ tip: 'giris', anahtar: this.anahtar, kanal: this.kanal, dinle: this.dinle }));
+      clearInterval(this.sayac);
+      this.sayac = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"tip":"ping"}'); }, 11000);
+    };
+    ws.onmessage = (e) => {
+      let m;
+      try { m = JSON.parse(e.data); } catch (hata) { console.warn('Canli mesaj okunamadi', hata); return; }
+      if (m.tip === 'ping') { ws.send('{"tip":"pong"}'); return; }
+      if (m.tip === 'hazir') { this.bekleme = 1000; this.durumBildir('bagli'); }
+      if (m.tip !== 'pong') this.olay(m);
+    };
+    ws.onclose = (e) => {
+      clearInterval(this.sayac);
+      this.durumBildir('koptu');
+      // 4401 / 4403: anahtar ya da izin hatasi; yeniden denemek anlamsiz
+      if (this.kapali || e.code === 4401 || e.code === 4403) return;
+      setTimeout(() => this.#baglan(), this.bekleme);
+      this.bekleme = Math.min(this.bekleme * 2, 30000);
+    };
+    ws.onerror = (hata) => console.warn('Canli baglanti hatasi', hata);
+  }
+
+  /** Konum gonderir: {id, lat, lon, hiz?, yon?, dogruluk?, veri?}. Bagli degilse false. */
+  konum(k) {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify({ tip: 'konum', ...k }));
+    return true;
+  }
+
+  kapat() {
+    this.kapali = true;
+    clearInterval(this.sayac);
+    this.ws?.close();
+  }
 }
 
 /** Rota cizgisini haritaya ekler (varsa gunceller). */

@@ -234,3 +234,113 @@ class HaritaIstemcisi:
     async def yerlesim_alt(self, yerlesim_id: int, tur: str | None = None, limit: int = 100, atla: int = 0) -> list[dict]:
         """Alt ogeler (ilin ilceleri, ilcenin mahalleleri ...)."""
         return await self._istek("GET", f"/v1/yerlesim/{yerlesim_id}/alt", {"tur": tur, "limit": limit, "atla": atla})
+
+    # ---------- Yol uyarilari, hava, trafik ----------
+
+    @staticmethod
+    def _cizgi(cizgi: str | list[list[float]]) -> dict[str, Any]:
+        """Cizgi govdesi: Valhalla polyline6 metni ya da [[lat, lon], ...]."""
+        return {"polyline": cizgi} if isinstance(cizgi, str) else {"noktalar": cizgi}
+
+    async def yol_uyarilari(self, cizgi: str | list[list[float]], tampon_m: float = 25, turler: list[str] | None = None) -> list[dict]:
+        """Rota boyunca hiz kamerasi / hiz kesici. rota_m: rota basindan uzaklik (sirali)."""
+        govde = {**self._cizgi(cizgi), "tampon_m": tampon_m, "turler": turler}
+        return (await self._istek("POST", "/v1/yol/uyarilar", govde=govde))["uyarilar"]
+
+    async def rota_havasi(self, cizgi: str | list[list[float]], sure_sn: float | None = None, kalkis: str | None = None) -> dict:
+        """Rota boyunca varis saatindeki hava ve surus uyarilari (firtina, kar, buzlanma, kuvvetli_yagis, kuvvetli_ruzgar, sis)."""
+        return await self._istek("POST", "/v1/yol/hava", govde={**self._cizgi(cizgi), "sure_sn": sure_sn, "kalkis": kalkis})
+
+    async def trafik_izi(self, noktalar: list[dict], profil: Profil = "motosiklet") -> dict:
+        """Bir surusun GPS izini (lat, lon, zaman Unix sn; artan sirada, en az 5) ortak trafik profiline katar. Kimlik saklanmaz."""
+        return await self._istek("POST", "/v1/trafik/iz", govde={"profil": profil, "noktalar": noktalar})
+
+    async def trafik_suresi(self, cizgi: str | list[list[float]], profil: Profil = "motosiklet", zaman: str | None = None) -> dict:
+        """Ogrenilmis yol hizlariyla rota suresi: valhalla_sure_sn, tahmini_sure_sn, kapsama."""
+        return await self._istek("POST", "/v1/trafik/sure", govde={**self._cizgi(cizgi), "profil": profil, "zaman": zaman})
+
+    # ---------- Planlama ----------
+
+    async def planla(self, araclar: list[dict], gorevler: list[dict] | None = None, gonderiler: list[dict] | None = None,
+                     profil: Profil = "motosiklet", geometri: bool = False) -> dict:
+        """Cok kuryeli planlama (VROOM): hangi kurye hangi isi hangi sirayla. Arac: {id, baslangic, bitis?, kapasite?, beceriler?,
+        calisma?, maks_gorev?}; gorev: {id, konum, sure_sn?, miktar?, zaman_araliklari?, oncelik?}; gonderi: {id, alim, teslim, miktar?}."""
+        return await self._istek("POST", "/v1/planla", govde={"profil": profil, "araclar": araclar, "gorevler": gorevler or [],
+                                                              "gonderiler": gonderiler or [], "geometri": geometri})
+
+    async def en_yakin(self, hedef: Nokta, adaylar: list[dict], profil: Profil = "motosiklet", adet: int = 5) -> list[dict]:
+        """Adaylari ({id, konum}) hedefe gercek yol suresine gore siralar: [{id, sure_sn, mesafe_m}]."""
+        govde = {"hedef": _nokta(hedef), "adaylar": adaylar, "profil": profil, "adet": adet}
+        return (await self._istek("POST", "/v1/en-yakin", govde=govde))["adaylar"]
+
+    # ---------- Kapi havuzu ----------
+
+    async def kapi_ogren(self, sokak_id: int, kapi_no: str, enlem: float, boylam: float, dogruluk_m: float | None = None) -> dict:
+        """Teslimat konumundan kapi numarasi ogretir (ortak havuz). OSM'de varsa durum "osm_var"."""
+        govde = {"sokak_id": sokak_id, "kapi_no": kapi_no, "lat": enlem, "lon": boylam, "dogruluk_m": dogruluk_m}
+        return await self._istek("POST", "/v1/adres/kapi-ogren", govde=govde)
+
+    async def kapi_ogren_geri_al(self, kapi_id: int) -> dict:
+        """Bu projenin kapi gozlemlerini geri alir (yanlis bildirim)."""
+        return await self._istek("DELETE", f"/v1/adres/kapi-ogren/{kapi_id}")
+
+    async def ogrenilen_kapilar(self, sokak_id: int) -> list[dict]:
+        """Sokakta havuzdan ogrenilmis kapilar."""
+        return await self._istek("GET", f"/v1/adres/sokak/{sokak_id}/ogrenilen-kapilar")
+
+    # ---------- Paylasim ve GPX ----------
+
+    async def paylasim_olustur(self, duraklar: list[dict], profil: str = "araba", ad: str | None = None, sure_saat: int = 72) -> dict:
+        """Duraklari kisa kodla paylasir: {kod, bitis}. Navigasyon baglantisi: <navigasyon sayfasi>?kod=<kod>."""
+        return await self._istek("POST", "/v1/paylasim", govde={"duraklar": duraklar, "profil": profil, "ad": ad, "sure_saat": sure_saat})
+
+    async def paylasim_getir(self, kod: str) -> dict:
+        """Paylasilan rota: {ad, profil, duraklar, bitis}."""
+        return await self._istek("GET", f"/v1/paylasim/{kod}")
+
+    async def paylasim_sil(self, kod: str) -> dict:
+        """Projenin kendi paylasimini iptal eder."""
+        return await self._istek("DELETE", f"/v1/paylasim/{kod}")
+
+    async def _ham(self, yol: str, **secenek: Any) -> httpx.Response:
+        """JSON olmayan govde / yanit icin istek; hata kodlarini HaritaHatasi'na cevirir."""
+        try:
+            yanit = await self._http.post(yol, **secenek)
+        except httpx.HTTPError as hata:
+            log.error("HARITA istegi basarisiz POST %s: %s", yol, type(hata).__name__)
+            raise HaritaHatasi(0, "Harita servisine ulasilamadi.") from hata
+        if yanit.status_code >= 400:
+            log.warning("HARITA hata kodu %s POST %s: %s", yanit.status_code, yol, yanit.text[:300])
+            raise HaritaHatasi(yanit.status_code, HATA_METNI.get(yanit.status_code, "Harita servisi hatasi."))
+        return yanit
+
+    async def gpx_olustur(self, duraklar: list[dict], cizgi: str | list[list[float]] | None = None, ad: str | None = None) -> str:
+        """Duraklar ve (varsa) rota cizgisinden GPX 1.1 metni."""
+        govde: dict[str, Any] = {"duraklar": duraklar, "ad": ad, **(self._cizgi(cizgi) if cizgi else {})}
+        return (await self._ham("/v1/gpx/olustur", json=govde)).text
+
+    async def gpx_oku(self, metin: str | bytes, iz_takip: bool = False) -> dict:
+        """GPX dosyasini okur: duraklar (iz_takip ile izden ara noktalar), yol_noktalari, rotalar, izler."""
+        govde = metin.encode("utf-8") if isinstance(metin, str) else metin
+        return (await self._ham("/v1/gpx/oku", params={"iz_takip": str(iz_takip).lower()}, content=govde)).json()
+
+    # ---------- Canli konum ve cevrimdisi ----------
+
+    async def canli_konum(self, kanal: str, cihaz_id: str, enlem: float, boylam: float, **ek: Any) -> list[dict]:
+        """Sunucudan konum yayini (hiz, yon, dogruluk, veri istege bagli). Donus: olaylar (bolge giris / cikis dahil)."""
+        govde = {"id": cihaz_id, "lat": enlem, "lon": boylam, **ek}
+        return (await self._istek("POST", f"/v1/canli/{kanal}/konum", govde=govde))["olaylar"]
+
+    async def canli_konumlar(self, kanal: str) -> list[dict]:
+        """Kanaldaki son konumlar (son 1 saat)."""
+        return await self._istek("GET", f"/v1/canli/{kanal}/konumlar")
+
+    async def canli_bolgeler(self, kanal: str, bolgeler: list[dict] | None = None) -> Any:
+        """bolgeler verilirse kanalin bolgelerini degistirir ({id, ad, merkez + yaricap_m | poligon}); verilmezse listeler."""
+        if bolgeler is None:
+            return await self._istek("GET", f"/v1/canli/{kanal}/bolgeler")
+        return await self._istek("PUT", f"/v1/canli/{kanal}/bolgeler", govde=bolgeler)
+
+    async def cevrimdisi_paketler(self) -> dict:
+        """Indirilebilir il paketleri (PMTiles) ve yazi tipi / simge arsivi."""
+        return await self._istek("GET", "/v1/cevrimdisi/paketler")

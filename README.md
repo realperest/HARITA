@@ -9,10 +9,11 @@ Kapsam: tum Turkiye. Veri: OpenStreetMap (c) OpenStreetMap katkicilari (ODbL).
 
 | Servis | Teknoloji | Ne yapar | Dis erisim |
 |---|---|---|---|
-| `tiles` | Protomaps PMTiles + nginx | Vektor harita karolari, yazi tipleri, simgeler | Evet (alan adi, onbellekli) |
+| `tiles` | Protomaps PMTiles + nginx | Vektor harita karolari, yazi tipleri, simgeler, 81 il cevrimdisi paketi | Evet (alan adi, onbellekli) |
 | `rota` | Valhalla | Rota, sure/mesafe matrisi (auto, motosiklet, bisiklet, yaya) | Hayir (ic ag) |
 | `gateway` | FastAPI | Proje anahtari, izin, kaynak kisiti, kota, kullanim sayaci, OSRM uyumlu rota | Evet (alan adi) |
-| `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlarini, sokaklari, kapi numaralarini, yerleri ve adlandirilmis binalari OSM'den yukler, aylik tazeler. Adres aramasi bu veriden yapilir (dis servis yok) | Hayir |
+| `plan` | VROOM | Cok araçli / cok kuryeli atama ve siralama (matris gateway'den hazir gelir) | Hayir (ic ag) |
+| `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlarini, sokaklari, kapi numaralarini, yerleri, adlandirilmis binalari, hiz kamerasi ve kasisleri OSM'den yukler, aylik tazeler. Adres aramasi bu veriden yapilir (dis servis yok) | Hayir |
 | `harita-db`, `harita-redis` | PostGIS 17, Redis 7 (Coolify'in ayri kaynaklari, compose disinda) | Proje / anahtar kayitlari, adres ve yerlesim verisi, kota sayaclari | Hayir |
 | `harita-deneme` | nginx (ayri Coolify uygulamasi, `deneme/`) | Deneme haritasi, veritabani araci, navigasyon denemesi | Evet |
 
@@ -61,6 +62,14 @@ Karo, rota, Valhalla, arama, adres, yerlesim, uyumlu uclar, yonetim ve deneme sa
 | `GET /v1/baglanti/coz` | Google / Yandex / Apple / Waze baglantisindan noktalar |
 | `GET /nominatim/*`, `/photon/*` | Nominatim ve Photon uyumlu uclar (kendi adres indeksimizden) |
 | `POST /valhalla/{route,isochrone,optimized_route,trace_attributes,...}` | Valhalla'nin tum API'si (izokron, harita eslestirme, optimize rota) |
+| `POST /v1/adres/ayristir` | Serbest adresi parcalara ayirir, dogrular, konum ve guven puani verir |
+| `POST /v1/adres/kapi-ogren` | Ortak kapi numarasi havuzu (teslimat konumundan ogrenme) |
+| `POST /v1/yol/uyarilar`, `POST /v1/yol/hava` | Rota boyunca hiz kamerasi / kasis ve varis saatindeki hava |
+| `POST /v1/planla`, `POST /v1/en-yakin` | Cok kuryeli planlama (VROOM) ve gercek yol suresiyle en yakin kurye |
+| `POST /v1/trafik/iz`, `POST /v1/trafik/sure` | Anonim GPS izlerinden trafik profili ve duzeltilmis sure |
+| `/v1/paylasim`, `/v1/gpx/*` | Rota paylasim kodu, GPX olusturma / okuma (iz takibi) |
+| `WS /v1/canli/ws`, `/v1/canli/{kanal}/*` | Canli konum yayini ve bolge giris / cikis olaylari |
+| `GET /v1/cevrimdisi/paketler` | Il bazinda cevrimdisi harita paketleri |
 | `/yonetim/*` | Proje ve anahtar yonetimi |
 | `GET /saglik`, `GET /saglik/hazir` | Canlilik / hazirlik |
 

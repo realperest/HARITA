@@ -93,6 +93,16 @@ const rota = await h.rota([{ lat: 40.99, lon: 29.02 }, { lat: 40.98, lon: 29.03 
 | Nominatim uyumlu | `GET /nominatim/search?q=`, `/nominatim/reverse?lat=&lon=` | Nominatim bekleyen istemciler |
 | Photon uyumlu | `GET /photon/api?q=`, `/photon/reverse` | Photon bekleyen istemciler (kendi indeksimizden) |
 | Arama (GeoJSON) | `GET /v1/arama`, `/v1/ters-arama` | Photon bicimli GeoJSON; kendi adres indeksimizden |
+| Yol uyarilari | `POST /v1/yol/uyarilar` `{polyline \| noktalar, tampon_m?, turler?}`, `GET /v1/yol/uyarilar?kutu=bati,guney,dogu,kuzey` | Rota boyunca hiz kamerasi ve hiz kesici (OSM), `rota_m` ile sirali; navigasyon 300-700 m once sesli uyarir. OSM'de Turkiye kamera kapsami sinirlidir |
+| Rota boyunca hava | `POST /v1/yol/hava` `{polyline \| noktalar, sure_sn?, kalkis?}` | En fazla 25 ornek noktada varis saatindeki sicaklik, yagis, ruzgar, gorus; uyarilar firtina, kar, buzlanma, kuvvetli_yagis, kuvvetli_ruzgar, sis. Kaynak Open-Meteo (ucretsiz sunucu ticari olmayan kullanim icindir; ticari kullanimda `HAVA_ADRESI` + `HAVA_ANAHTARI`) |
+| Cok kuryeli planlama | `POST /v1/planla` `{araclar, gorevler, gonderiler, profil, geometri}` | VROOM: hangi kurye hangi isi hangi sirayla; kapasite, beceri, zaman araligi, oncelik, alim-teslim cifti; en fazla 300 farkli konum (matris Valhalla'dan 50x50 bloklarla). Atanamayanlar `atanamayan` listesinde |
+| En yakin kurye | `POST /v1/en-yakin` `{hedef, adaylar: [{id, konum}], profil, adet}` | Gercek yol suresine gore siralama (kus ucusu degil), en fazla 50 aday |
+| Trafik profili | `POST /v1/trafik/iz` `{profil, noktalar: [{lat, lon, zaman}]}`, `POST /v1/trafik/sure` `{polyline \| noktalar, profil, zaman?}` | Projelerin GPS izlerinden yol + haftanin saati basina ortalama hiz (kimlik / iz saklanmaz) ve son 20 dk canli hiz; sure tahmini `tahmini_sure_sn` ve `kapsama` (verisi olan yol orani) doner. Veri biriktikce iyilesir |
+| Ortak kapi havuzu | `POST /v1/adres/kapi-ogren` `{sokak_id, kapi_no, lat, lon, dogruluk_m?}`, `DELETE /v1/adres/kapi-ogren/{id}`, `GET /v1/adres/sokak/{id}/ogrenilen-kapilar` | OSM'de olmayan kapi numarasini teslimat konumundan ogrenir; konum gozlemlerin geometrik ortancasi, 2 gozlemde guvenilir. Ayristirma (`kaynak: havuz`, tek gozlemde puan en fazla 84) ve en yakin kapi kullanir |
+| Paylasim kodu | `POST /v1/paylasim` `{duraklar, profil, ad?, sure_saat?}`, `GET` / `DELETE /v1/paylasim/{kod}` | 8 karakterlik kod (en fazla 30 gun); navigasyon `navigasyon.html?kod=<kod>` ile acar. Duraklar `ara` (GPX izi) noktalarini da tasir |
+| GPX | `POST /v1/gpx/olustur` (GPX 1.1 dosyasi), `POST /v1/gpx/oku?iz_takip=true` (govde GPX metni, en fazla 5 MB) | Duraklar wpt + rte, cizgi trk; okumada `iz_takip` ile izden ara noktalar (rota izin yollarini izler). Google / Yandex GPX almaz: navigasyondaki "Google'da ac" / "Yandex'te ac" baglantilari kullanilir |
+| Canli konum | WebSocket `/v1/canli/ws` (ilk mesaj `{tip: giris, anahtar, kanal, dinle}`), `POST /v1/canli/{kanal}/konum`, `GET /v1/canli/{kanal}/konumlar`, `GET` / `PUT /v1/canli/{kanal}/bolgeler` | Proje + kanal basina konum yayini ve bolge (daire / poligon) giris-cikis olaylari; kalp atisi 10 sn, 35 sn sessizlikte kapanir, istemci kendiliginden yeniden baglanir (`CanliBaglanti`). Saniyede en fazla 5 konum / baglanti |
+| Cevrimdisi paketler | `GET /v1/cevrimdisi/paketler`, dosyalar `{karo}/paket/<il>.pmtiles`, `{karo}/paket/varlik.tar.gz` | 81 il icin PMTiles (z14), yazi tipi + simge arsivi; mobil uygulama indirip MapLibre'de `pmtiles://` ile yerelden acar |
 | Yonetim | `/yonetim/*` | Proje, anahtar, izin, kaynak, kullanim |
 
 ## SIPARIS / Lezzet Sepeti
@@ -118,6 +128,11 @@ Hazir: `siparis-sunucu` ve `siparis-web` kayitlari (alan adlari: `isletme`, `mus
 - **Acilir listelerde mahalle disi yollar:** SIPARIS'in "dahil_ilce" karsiligi `GET /v1/adres/alt?ust=ilce:{id}&cocuk=sokak`.
 - **Kurye yonlendirmesi:** Yandex / Google / Waze baglantilarina ek olarak HARITA navigasyonu: `navigasyon_baglantisi(duraklar, adlar)`
   (cok duraklı, sesli Turkce).
+- **Kurye atama:** tek siparis icin `en_yakin()` (gercek yol suresi), toplu dagitim icin `planla()` (VROOM; restorandan al -> musteriye
+  birak ciftleri `gonderiler`). Kurye konumlari `CanliBaglanti` (WebSocket) ya da `canli_konum()` ile; teslimat bolgesine giris /
+  cikis olaylari `canli_bolgeler()` ile tanimlanir.
+- **Kapi numarasi ogrenme:** teslim edildi aninda `kapi_ogren(sokak_id, kapi_no, lat, lon)`; ortak havuz tum projelere yarar.
+- **Trafik:** kurye izleri `trafik_izi()` ile gonderilirse varis suresi `trafik_suresi()` ile ogrenilmis hizlardan hesaplanir.
 - **Gecis:** Adim adim, her adim ayri dagitimla; once rota, sonra karo, sonra adres. Eski uclar o zamana kadar calismaya devam eder.
 
 ## MotoConvoy
@@ -137,6 +152,11 @@ Python istemcisi icin `httpx==0.28.1` requirements.txt'e eklenir.
 - **Ani durma ortami:** `GET /v1/yol/nokta?lat&lon&yon` (yol sinifi, trafik isigi / dur levhasi ve kavsaga kalan mesafe, tunel, gise, il / ilce);
   OSM hiz siniri cogu yolda bostur (`hiz_siniri_kmh` null), `tahmini_hiz_kmh` yol sinifindan gelir.
 - **Rota aktarma:** `GET /v1/baglanti/coz?adres=<Google Maps / Yandex baglantisi>` (kisa baglantilar dahil).
+- **Tur paylasimi:** `gpx_oku(iz_takip=True)` ile disaridan gelen tur (Komoot, Garmin, OsmAnd), `paylasim_olustur()` ile kisa kod;
+  katilimcilar `navigasyon.html?kod=` ile ayni rotayi acar, Google / Yandex kullananlara "Google'da ac" / "Yandex'te ac" baglantisi.
+- **Yolculuk oncesi:** `yol_uyarilari()` (kamera, kasis) ve `rota_havasi()` (yol boyunca hava, buzlanma / ruzgar uyarisi).
+- **Konvoy:** uye konumlari `CanliBaglanti` (kanal = konvoy kimligi); mola / bulusma noktasi bolge olarak tanimlanir, giris olayi gelir.
+- **Cevrimdisi:** `cevrimdisi_paketler()` ile il paketleri; sinyal olmayan bolgelerde harita telefondan acilir.
 - **Bilinen sinir:** Yukseklik (rakim) verisi kurulmadi; `/valhalla/height` bos doner (bkz. YAYIN.md).
 
 ## Yeni proje
@@ -148,5 +168,5 @@ Python istemcisi icin `httpx==0.28.1` requirements.txt'e eklenir.
 
 ## Sinirlar
 
-Rota en fazla 50 nokta, matris en fazla 50 x 50, Valhalla govdesi en fazla 2 MB, adres aramasi en fazla 50 sonuc, toplu getirme 500 oge.
+Rota en fazla 50 nokta (duraklar + GPX ara noktalari), matris en fazla 50 x 50, planlama en fazla 300 konum, Valhalla govdesi en fazla 2 MB, adres aramasi en fazla 50 sonuc, toplu getirme 500 oge.
 Veri OpenStreetMap'e dayanir; kapi numarasi ve ad kapsami bolgeye gore degisir. Atif: (c) OpenStreetMap katkicilari.
