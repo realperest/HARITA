@@ -13,9 +13,11 @@ Tur = Literal["il", "ilce", "mahalle_koy", "sehir", "kasaba", "koy", "mezra", "s
 
 
 @router.get("/ara")
-async def ara(q: str = Query(min_length=2, max_length=100), tur: Tur | None = None, ust_id: int | None = None,
-              limit: int = Query(default=10, ge=1, le=50), _proje: dict = Depends(yetki("yerlesim"))) -> list[dict]:
-    """Ada gore yerlesim arama (Turkce karakter duyarsiz). tur ve ust_id ile daraltilir."""
+async def ara(q: str = Query(default="", max_length=100), tur: Tur | None = None, ust_id: int | None = None,
+              limit: int = Query(default=10, ge=1, le=100), _proje: dict = Depends(yetki("yerlesim"))) -> list[dict]:
+    """Ada gore yerlesim arama (Turkce karakter duyarsiz). tur ve ust_id ile daraltilir; q bos ise tur zorunludur (acilir liste: tum iller)."""
+    if len(q.strip()) < 2 and tur is None:
+        raise HTTPException(status_code=422, detail="q en az 2 karakter olmali (tur verilmediyse).")
     return await yerlesim_crud.ara(q, tur, ust_id, limit)
 
 

@@ -628,6 +628,8 @@ async function baglan() {
   katmanSecimiDoldur();
   motorKur();
   durumYenile();
+  Object.values(durum.combolar || {}).forEach((c) => c.sifirla());
+  durum.combolar?.[durum.sekme]?.ac(durum.sekme !== 'ara');
 }
 
 async function durumYenile() {
@@ -653,11 +655,158 @@ function sekmeAc(ad) {
   durum.sekme = ad;
   document.querySelectorAll('.sekme-dugme').forEach((d) => d.classList.toggle('aktif', d.dataset.sekme === ad));
   document.querySelectorAll('.sekme').forEach((s) => s.classList.toggle('aktif', s.id === `sekme-${ad}`));
+  durum.combolar?.[ad]?.ac(ad !== 'ara');
 }
 
 function haritaTikla(ll) {
   if (durum.sekme === 'pin') pinKoy(ll);
   else if (durum.sekme === 'rota') durakEkle(ll);
+}
+
+/* ---------- Adres combolari (il > ilce > mahalle/koy > sokak > bina > numara) ---------- */
+
+const COMBO_ADIMLARI = [
+  { tur: 'il', ad: 'İl' },
+  { tur: 'ilce', ad: 'İlçe' },
+  { tur: 'mahalle_koy', ad: 'Mahalle / köy' },
+  { tur: 'sokak', ad: 'Cadde / sokak' },
+  { tur: 'bina', ad: 'Site / bina' },
+  { tur: 'kapi', ad: 'Numara' },
+];
+const SECINIZ = '(seçiniz)';
+let canliKonumSozu = null;
+
+/** Tarayici konumu (bir kez sorulur); alinamazsa null doner ve sonraki cagrida yeniden denenir. */
+function canliKonum() {
+  if (!canliKonumSozu) {
+    canliKonumSozu = new Promise((coz) => {
+      if (!navigator.geolocation) { coz(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        (k) => coz({ lat: k.coords.latitude, lon: k.coords.longitude }),
+        (hata) => { console.warn('Canlı konum alınamadı', hata); coz(null); },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+      );
+    }).then((konum) => {
+      if (!konum) canliKonumSozu = null;
+      return konum;
+    });
+  }
+  return canliKonumSozu;
+}
+
+/** Bir adimin ogelerini getiren API yolu; ust adim secili degilse null. secili: adim -> secili oge. */
+function comboYol(adim, secili) {
+  const [il, ilce, mahalle, sokak] = secili;
+  const alt = (ust, cocuk = '') => `/v1/adres/alt?ust=${ust}${cocuk ? `&cocuk=${cocuk}` : ''}&limit=1000`;
+  switch (adim) {
+    case 0: return '/v1/yerlesim/ara?tur=il&limit=100';
+    case 1: return il && alt(`il:${il.id}`);
+    case 2: return ilce && alt(`ilce:${ilce.id}`);
+    case 3: return mahalle && alt(`mahalle_koy:${mahalle.id}`);
+    case 4: return sokak ? alt(`sokak:${sokak.id}`) : mahalle && alt(`mahalle_koy:${mahalle.id}`, 'bina');
+    default: return sokak && alt(`sokak:${sokak.id}`, 'kapi');
+  }
+}
+
+/**
+ * Basamakli acilir listeler. adimSayisi kadar liste kurulur; kullanici bir secim yapinca secildi(tur, oge) cagrilir.
+ * ac(): ilk acilista il listesini ve canli konumun il / ilcesini (secili) yukler; odak true ise il listesine odaklanir.
+ */
+function comboKur(kap, adimSayisi, mesajId, secildi) {
+  const secili = new Array(adimSayisi).fill(null);
+  const ogeler = new Array(adimSayisi).fill([]);
+  const sayac = new Array(adimSayisi).fill(0);
+  const secimler = COMBO_ADIMLARI.slice(0, adimSayisi).map((adim, i) => {
+    const secim = el('select', { sinif: 'girdi', 'aria-label': adim.ad });
+    secim.disabled = true;
+    secim.append(el('option', { value: '', metin: SECINIZ }));
+    secim.addEventListener('change', () => degisti(i));
+    kap.append(el('label', { sinif: 'alan' }, adim.ad, secim));
+    return secim;
+  });
+  let yukleniyor = null;
+  let yuklendi = false;
+
+  async function yukle(i) {
+    const no = ++sayac[i];
+    secili[i] = null;
+    ogeler[i] = [];
+    secimler[i].replaceChildren(el('option', { value: '', metin: SECINIZ }));
+    secimler[i].disabled = true;
+    const yol = comboYol(i, secili);
+    if (!yol) return;
+    const veri = await api(yol);
+    if (no !== sayac[i]) return;
+    ogeler[i] = [...veri].sort((a, b) => a.ad.localeCompare(b.ad, 'tr', { numeric: true }));
+    ogeler[i].forEach((o) => secimler[i].append(el('option', { value: String(o.id), metin: o.ad })));
+    secimler[i].disabled = !ogeler[i].length;
+  }
+
+  function sec(i, id) {
+    const oge = ogeler[i].find((o) => o.id === id) || null;
+    secili[i] = oge;
+    secimler[i].value = oge ? String(oge.id) : '';
+    return oge;
+  }
+
+  async function degisti(i) {
+    const oge = ogeler[i].find((o) => String(o.id) === secimler[i].value) || null;
+    secili[i] = oge;
+    mesaj(mesajId, '');
+    try {
+      const yuklemeler = [];
+      for (let j = i + 1; j < adimSayisi; j++) yuklemeler.push(yukle(j));
+      await Promise.all(yuklemeler);
+    } catch (hata) {
+      mesaj(mesajId, hata instanceof HataMesaji ? hata.message : 'Liste yüklenemedi.', 'hata');
+    }
+    if (oge) secildi(COMBO_ADIMLARI[i].tur, oge);
+  }
+
+  async function ilkYukleme() {
+    try {
+      await yukle(0);
+      const konum = await canliKonum();
+      if (konum) {
+        const nokta = await api(`/v1/yerlesim/nokta?lat=${konum.lat}&lon=${konum.lon}`);
+        const il = nokta.icinde.find((o) => o.tur === 'il');
+        if (il && sec(0, il.id)) {
+          await yukle(1);
+          const ilce = nokta.icinde.find((o) => o.tur === 'ilce');
+          if (ilce) sec(1, ilce.id);
+          await Promise.all(Array.from({ length: adimSayisi - 2 }, (_, k) => yukle(k + 2)));
+        }
+      }
+      yuklendi = true;
+    } catch (hata) {
+      mesaj(mesajId, hata instanceof HataMesaji ? hata.message : 'Adres listeleri yüklenemedi.', 'hata');
+    }
+  }
+
+  return {
+    async ac(odak) {
+      if (!yuklendi) {
+        yukleniyor ??= ilkYukleme().finally(() => { yukleniyor = null; });
+        await yukleniyor;
+      }
+      if (odak) secimler[0].focus();
+    },
+    sifirla() { yuklendi = false; },
+  };
+}
+
+/** Ara sekmesinde bir combo secimi: il / ilce / mahalle sinirina, diger adimlar ilgili noktaya gider. */
+async function comboAraSec(tur, oge) {
+  if (!['il', 'ilce', 'mahalle_koy'].includes(tur)) { adresSec(oge); return; }
+  try {
+    const y = await api(`/v1/yerlesim/${oge.id}?sinir=true`);
+    motor.sinir(y.sinir || null);
+    if (y.sinir) motor.sigdir(geometriKutusu(y.sinir));
+    else motor.uc(y.merkez.lat, y.merkez.lon, 14);
+    motor.pin({ lat: y.merkez.lat, lng: y.merkez.lon });
+  } catch (hata) {
+    mesaj('ara-mesaj', hata instanceof HataMesaji ? hata.message : 'Alan alınamadı.', 'hata');
+  }
 }
 
 /* ---------- Ara (metin -> konum) ---------- */
@@ -1107,6 +1256,11 @@ async function baslat() {
   const yerGecikmeli = gecikmeli(yerAra, 350);
   $('yer-girdi').addEventListener('input', yerGecikmeli);
   $('yer-tur').addEventListener('change', yerAra);
+  durum.combolar = {
+    ara: comboKur($('ara-combo'), 6, 'ara-mesaj', comboAraSec),
+    pin: comboKur($('pin-combo'), 3, 'pin-mesaj', (tur, o) => pinKoy({ lat: o.merkez.lat, lng: o.merkez.lon })),
+    yerlesim: comboKur($('yer-combo'), 3, 'yer-mesaj', (tur, o) => yerSec(o.id)),
+  };
   $('rota-ciz').addEventListener('click', rotaCiz);
   $('matris-hesapla').addEventListener('click', matrisHesapla);
   $('rota-temizle').addEventListener('click', rotaTemizle);
