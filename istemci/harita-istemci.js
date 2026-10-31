@@ -97,9 +97,52 @@ function sorgu(parametreler) {
   return p.toString();
 }
 
-/** Kapi no, sokak, bina, yer, yerlesim aramasi. tur: kapi | sokak | bina | yer | yerlesim. */
-export function adresAra(apiAdresi, anahtar, metin, { tur, ustId, lat, lon, limit = 10 } = {}) {
-  return istek(apiAdresi, anahtar, `/v1/adres/ara?${sorgu({ q: metin, tur, ust_id: ustId, lat, lon, limit })}`);
+/**
+ * Kapi no, sokak, bina, yer, yerlesim aramasi. tur: kapi | sokak | bina | yer | yerlesim.
+ * lat / lon verilirse esit eslesmelerde yakin olan one gelir; yaricapM (lat / lon gerekir) bu yaricap disini eler.
+ */
+export function adresAra(apiAdresi, anahtar, metin, { tur, ustId, lat, lon, limit = 10, yaricapM } = {}) {
+  return istek(apiAdresi, anahtar, `/v1/adres/ara?${sorgu({ q: metin, tur, ust_id: ustId, lat, lon, limit, yaricap_m: yaricapM })}`);
+}
+
+/** (tur, id) ogeleri tek istekte: [{tur, id}, ...] (en fazla 500). Ad, adres, zincir kimlikleri (ust) ve kaynak anahtari doner. */
+export function toplu(apiAdresi, anahtar, ogeler) {
+  return istek(apiAdresi, anahtar, '/v1/adres/toplu', { method: 'POST', body: JSON.stringify({ ogeler }) });
+}
+
+/** OSM kaynak anahtarindan (osm:node:.. / osm:way:.. / osm:relation:..) HARITA kayitlari (en fazla 500). */
+export function kaynaktan(apiAdresi, anahtar, anahtarlar) {
+  return istek(apiAdresi, anahtar, '/v1/adres/kaynak', { method: 'POST', body: JSON.stringify({ anahtarlar }) });
+}
+
+/** Secilen sokaktaki en yakin kapi numarasi (pin icin oneri); yoksa null. */
+export async function enYakinKapi(apiAdresi, anahtar, sokakId, lat, lon, yaricapM = 100) {
+  try {
+    return await istek(apiAdresi, anahtar, `/v1/adres/sokak/${sokakId}/en-yakin-kapi?${sorgu({ lat, lon, yaricap_m: yaricapM })}`);
+  } catch (hata) {
+    if (hata.durum === 404) return null;
+    throw hata;
+  }
+}
+
+/** Konumdaki yolun ozellikleri (sinif, hiz siniri, trafik isigi, dur levhasi, tunel, kopru, gise) ve il / ilce. */
+export function yolBilgisi(apiAdresi, anahtar, lat, lon, { profil = 'auto', yon } = {}) {
+  return istek(apiAdresi, anahtar, `/v1/yol/nokta?${sorgu({ lat, lon, profil, yon })}`);
+}
+
+/** Google / Yandex / Apple / Waze / OSM harita baglantisindaki noktalar [{lat, lon}] (kisa baglantilar dahil). */
+export async function baglantiCoz(apiAdresi, anahtar, adres) {
+  return (await istek(apiAdresi, anahtar, `/v1/baglanti/coz?${sorgu({ adres })}`)).noktalar;
+}
+
+/**
+ * HARITA navigasyon ekranini duraklarla acan baglanti (Yandex / Google yonlendirmesi yerine).
+ * duraklar: [{lat, lon}], adlar: ['Market', 'Musteri'], profil: araba | motosiklet | yaya.
+ */
+export function navigasyonBaglantisi(duraklar, { adlar, profil = 'araba', sayfa = 'https://harita-deneme.89.45.45.152.sslip.io/navigasyon.html' } = {}) {
+  const p = new URLSearchParams({ duraklar: duraklar.map((d) => `${d.lat.toFixed(6)},${d.lon.toFixed(6)}`).join(';'), profil });
+  if (adlar?.length) p.set('adlar', adlar.map((a) => String(a).replace(/\|/g, ' ')).join('|'));
+  return `${sayfa}?${p}`;
 }
 
 /** Pin -> adres: adres metni, il / ilce / mahalle, en yakin sokak, kapi ve yerler. */
@@ -167,6 +210,11 @@ export class HaritaIstemcisi {
   sekil(tur, id) { return sekil(this.apiAdresi, this.anahtar, tur, id); }
   valhalla(uc, govde) { return valhalla(this.apiAdresi, this.anahtar, uc, govde); }
   adimAdimRota(noktalar, costing) { return adimAdimRota(this.apiAdresi, this.anahtar, noktalar, costing); }
+  toplu(ogeler) { return toplu(this.apiAdresi, this.anahtar, ogeler); }
+  kaynaktan(anahtarlar) { return kaynaktan(this.apiAdresi, this.anahtar, anahtarlar); }
+  enYakinKapi(sokakId, lat, lon, yaricapM) { return enYakinKapi(this.apiAdresi, this.anahtar, sokakId, lat, lon, yaricapM); }
+  yolBilgisi(lat, lon, secenek) { return yolBilgisi(this.apiAdresi, this.anahtar, lat, lon, secenek); }
+  baglantiCoz(adres) { return baglantiCoz(this.apiAdresi, this.anahtar, adres); }
 }
 
 /** Rota cizgisini haritaya ekler (varsa gunceller). */

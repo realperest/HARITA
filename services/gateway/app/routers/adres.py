@@ -17,9 +17,43 @@ router = APIRouter(prefix="/v1/adres", tags=["adres"])
 async def ara(q: str = Query(min_length=2, max_length=200), tur: Literal["kapi", "sokak", "bina", "yer", "yerlesim"] | None = None,
               ust_id: int | None = None, lat: float | None = Query(default=None, ge=-90, le=90),
               lon: float | None = Query(default=None, ge=-180, le=180), limit: int = Query(default=10, ge=1, le=50),
+              yaricap_m: int | None = Query(default=None, ge=100, le=500000),
               _proje: dict = Depends(yetki("adres"))) -> list[dict]:
-    """Birlesik adres arama. 'Namik Kemal Bulvari 12' gibi metinler kapi numarasina kadar eslesir. lat/lon verilirse yakinlik sirayi etkiler."""
-    return await adres_crud.ara(q, tur, ust_id, lat, lon, limit)
+    """Birlesik adres arama. 'Namik Kemal Bulvari 12' gibi metinler kapi numarasina kadar eslesir.
+    lat/lon verilirse esit eslesmelerde yakin olan one gelir; yaricap_m ile (lat/lon gerekir) bu yaricap disi elenir."""
+    return await adres_crud.ara(q, tur, ust_id, lat, lon, limit, yaricap_m)
+
+
+class TopluOge(BaseModel):
+    """Toplu getirilecek oge: tur (sokak, kapi, yer, bina ya da il, ilce, mahalle_koy, sehir ...) ve kimlik."""
+
+    tur: Literal["sokak", "kapi", "yer", "bina", "il", "ilce", "mahalle_koy", "sehir", "kasaba", "koy", "mezra", "semt"]
+    id: int
+
+
+class TopluIstek(BaseModel):
+    """En fazla 500 oge."""
+
+    ogeler: list[TopluOge] = Field(min_length=1, max_length=500)
+
+
+class KaynakIstek(BaseModel):
+    """OSM kaynak anahtarlari (osm:node:123, osm:way:456, osm:relation:789, sokak:...). En fazla 500."""
+
+    anahtarlar: list[str] = Field(min_length=1, max_length=500)
+
+
+@router.post("/toplu")
+async def toplu(istek: TopluIstek, _proje: dict = Depends(yetki("adres"))) -> list[dict]:
+    """Kimlikleri verilen ogeler tek istekte: ad, adres metni, zincir kimlikleri (ust: mahalle_id, ilce_id, il_id) ve kaynak anahtari.
+    Kayitli adreslerin adlarini toplu gostermek ve secimlerin tutarliligini dogrulamak icin. Bulunamayan oge listede yer almaz."""
+    return await adres_crud.toplu([(o.tur, o.id) for o in istek.ogeler])
+
+
+@router.post("/kaynak")
+async def kaynak(istek: KaynakIstek, _proje: dict = Depends(yetki("adres"))) -> list[dict]:
+    """OSM kaynak anahtarindan HARITA kaydi (baska sistemlerdeki OSM kaynakli kayitlari eslemek icin)."""
+    return await adres_crud.kaynaktan(list(dict.fromkeys(istek.anahtarlar)))
 
 
 @router.get("/nokta")
@@ -58,6 +92,16 @@ async def sokak_kapilari(sokak_id: int, limit: int = Query(default=200, ge=1, le
                          _proje: dict = Depends(yetki("adres"))) -> list[dict]:
     """Bir sokaktaki kapi numaralari."""
     return await adres_crud.kapilar(sokak_id, limit, atla)
+
+
+@router.get("/sokak/{sokak_id}/en-yakin-kapi")
+async def sokak_en_yakin_kapi(sokak_id: int, lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180),
+                              yaricap_m: int = Query(default=100, ge=5, le=1000), _proje: dict = Depends(yetki("adres"))) -> dict:
+    """Pin icin kapi numarasi onerisi: secilen sokaktaki en yakin kapi (mesafe_m ile). Yaricapta kapi yoksa 404."""
+    veri = await adres_crud.en_yakin_kapi(sokak_id, lat, lon, yaricap_m)
+    if veri is None:
+        raise HTTPException(status_code=404, detail="Bu sokakta yakinda kapi numarasi yok.")
+    return veri
 
 
 @router.get("/sokak/{sokak_id}/binalar")
@@ -130,6 +174,9 @@ async def alt_ogeler(ust: str = Query(pattern=r"^(il|ilce|mahalle_koy|semt|sokak
     """Adres agacinda bir alt seviye: il > ilce > mahalle/koy > sokak > site-bina / kapi. Acilir listeler tek uctan beslenir."""
     tur, kimlik = ust.split(":")
     kimlik = int(kimlik)
+    if tur == "ilce" and cocuk == "sokak":
+        # mahalle / koy sinirina dusmeyip dogrudan ilceye bagli yollar
+        return await adres_crud.ilce_sokaklari(kimlik, None, limit, atla)
     if tur in ("il", "ilce"):
         # il > ilce, ilce > mahalle / koy (sehir, kasaba, semt merkezi noktalari acilir listeye girmez)
         return await yerlesim_crud.alt_ogeler(kimlik, "ilce" if tur == "il" else "mahalle_koy", limit, atla)

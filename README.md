@@ -55,7 +55,10 @@ Karo, rota, Valhalla, arama, adres, yerlesim, uyumlu uclar, yonetim ve deneme sa
 | `GET /v1/yerlesim/nokta` | Noktanin il / ilce / mahalle-koy bilgisi ve en yakin merkez |
 | `GET /v1/yerlesim/yakin` | Yaricap icindeki merkezler |
 | `GET /v1/yerlesim/{id}`, `/{id}/alt` | Ayrinti (zincir, GeoJSON sinir) ve alt ogeler (ilin ilceleri vb.) |
-| `GET /v1/adres/ara`, `/nokta`, `/yerler`, `/mahalle/{id}/sokaklar`, `/sokak/{id}` | Sokak, kapi numarasi, onemli yerler: arama, ters arama, harita katmani, acilir listeler |
+| `GET /v1/adres/ara`, `/nokta`, `/yerler`, `/alt`, `/mahalle/{id}/sokaklar`, `/sokak/{id}`, `/sokak/{id}/en-yakin-kapi` | Sokak, kapi numarasi, onemli yerler: arama (yakinlik, yaricap), ters arama, harita katmani, acilir listeler, kapi onerisi |
+| `POST /v1/adres/toplu`, `POST /v1/adres/kaynak` | Toplu getirme (ad, zincir kimlikleri) ve OSM kaynak anahtariyla esleme |
+| `GET /v1/yol/nokta` | Konumdaki yolun ozellikleri (sinif, hiz, trafik isigi, tunel, gise ...) |
+| `GET /v1/baglanti/coz` | Google / Yandex / Apple / Waze baglantisindan noktalar |
 | `GET /nominatim/*`, `/photon/*` | Nominatim ve Photon uyumlu uclar (kendi adres indeksimizden) |
 | `POST /valhalla/{route,isochrone,optimized_route,trace_attributes,...}` | Valhalla'nin tum API'si (izokron, harita eslestirme, optimize rota) |
 | `/yonetim/*` | Proje ve anahtar yonetimi |

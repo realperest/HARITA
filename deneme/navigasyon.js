@@ -74,6 +74,9 @@ const durum = {
   simHiz: 50,
   konum: null,
   hedef: null,
+  duraklar: [],
+  gecilenDurak: 0,
+  durakEkle: false,
   rota: null,
   rotaSayac: 0,
   mod: 'plan',
@@ -293,29 +296,63 @@ const nokta = (p) => ({ type: 'FeatureCollection', features: [{ type: 'Feature',
 
 /* ---------- Rota ---------- */
 
-/** Valhalla yanitini navigasyonun kullanacagi bicime cevirir (birikimli mesafeler, manevra konumlari). */
-function rotaHazirla(v) {
-  const bacak = v.trip.legs[0];
-  const koord = polylineCoz(bacak.shape, 6);
+/**
+ * Valhalla yanitini navigasyonun kullanacagi bicime cevirir: cok duraklı rotada bacaklar tek cizgide birlesir,
+ * manevra konumlari kaydirilir; bacakSonM her duragin rota uzerindeki mesafesidir.
+ */
+function rotaHazirla(v, ilkDurak = 0) {
+  const koord = [];
+  const manevralar = [];
+  const bacakSonIndeks = [];
+  for (const bacak of v.trip.legs) {
+    const parca = polylineCoz(bacak.shape, 6);
+    // Sonraki bacagin ilk noktasi oncekinin son noktasidir; tekrar eklenmez
+    const kayma = koord.length ? koord.length - 1 : 0;
+    koord.push(...(koord.length ? parca.slice(1) : parca));
+    for (const m of bacak.maneuvers) {
+      manevralar.push({ ...m, begin_shape_index: m.begin_shape_index + kayma, end_shape_index: m.end_shape_index + kayma });
+    }
+    bacakSonIndeks.push(koord.length - 1);
+  }
   const kum = [0];
   for (let i = 1; i < koord.length; i++) kum.push(kum[i - 1] + mesafeM(koord[i - 1], koord[i]));
-  const manevralar = bacak.maneuvers.map((m) => ({ ...m, basM: kum[m.begin_shape_index] ?? 0, sonM: kum[m.end_shape_index] ?? kum[kum.length - 1] }));
-  return { koord, kum, toplam: kum[kum.length - 1] || 0, manevralar, sure: v.trip.summary.time, segman: 0, no: 0 };
+  const son = kum[kum.length - 1] || 0;
+  return {
+    koord, kum, toplam: son, sure: v.trip.summary.time, segman: 0, no: 0, ilkDurak,
+    bacakSonM: bacakSonIndeks.map((i) => kum[i] ?? son),
+    manevralar: manevralar.map((m) => ({ ...m, basM: kum[m.begin_shape_index] ?? 0, sonM: kum[m.end_shape_index] ?? son })),
+  };
 }
 
-/** Baslangictan hedefe rota ister. Baslangicta yon varsa Valhalla aracin gittigi yondeki yolu secer. */
-async function rotaIste(baslangic, hedef) {
+/** Baslangictan sirayla duraklara rota ister. Baslangicta yon varsa Valhalla aracin gittigi yondeki yolu secer. */
+async function rotaIste(baslangic, duraklar, ilkDurak = 0) {
   const bas = { lat: baslangic.lat, lon: baslangic.lon };
   if (Number.isFinite(baslangic.yon) && (baslangic.hiz ?? 0) > 2) Object.assign(bas, { heading: Math.round(baslangic.yon), heading_tolerance: 60 });
   const v = await api('/valhalla/route', {
     method: 'POST',
     body: JSON.stringify({
-      locations: [bas, { lat: hedef.lat, lon: hedef.lon }],
+      locations: [bas, ...duraklar.map((d) => ({ lat: d.lat, lon: d.lon }))],
       costing: COSTING[durum.profil],
       directions_options: { language: 'tr-TR', units: 'kilometers' },
     }),
   });
-  return rotaHazirla(v);
+  return rotaHazirla(v, ilkDurak);
+}
+
+/** Henuz ulasilmamis duraklar (yeniden rota ve baslangic icin). */
+function kalanDuraklar() {
+  return durum.duraklar.slice(durum.gecilenDurak);
+}
+
+/** Duraklari haritaya numarali isaret olarak cizer (son durak hedef rengiyle). */
+function duraklariCiz() {
+  veriYaz('hedef', {
+    type: 'FeatureCollection',
+    features: durum.duraklar.map((d, i) => ({
+      type: 'Feature', geometry: { type: 'Point', coordinates: [d.lon, d.lat] },
+      properties: { no: String(i + 1), son: i === durum.duraklar.length - 1, gecildi: i < durum.gecilenDurak },
+    })),
+  });
 }
 
 /** Yeni rotayi etkin yapar ve haritaya cizer. */
@@ -529,8 +566,16 @@ function kaplamaKur() {
     paint: { 'line-color': '#58A6FF', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3.5, 18, 11] } });
   kat({ id: 'manevra-nokta', type: 'circle', source: 'manevra-nokta',
     paint: { 'circle-radius': 6, 'circle-color': '#FFFFFF', 'circle-stroke-color': '#58A6FF', 'circle-stroke-width': 3 } });
+  // Duraklar: son durak (hedef) kirmizi, ara duraklar turuncu, gecilenler gri; ustunde sira numarasi
   kat({ id: 'hedef', type: 'circle', source: 'hedef',
-    paint: { 'circle-radius': 8, 'circle-color': '#F85149', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2 } });
+    paint: {
+      'circle-radius': ['case', ['get', 'son'], 10, 9],
+      'circle-color': ['case', ['get', 'gecildi'], '#8B949E', ['get', 'son'], '#F85149', '#D29922'],
+      'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2,
+    } });
+  kat({ id: 'hedef-no', type: 'symbol', source: 'hedef',
+    layout: { 'text-field': ['get', 'no'], 'text-font': ['Noto Sans Medium'], 'text-size': 11, 'text-allow-overlap': true },
+    paint: { 'text-color': '#FFFFFF' } });
 }
 
 function veriYaz(ad, veri) {
@@ -610,6 +655,9 @@ function arayuzGuncelle() {
   $('ortala').hidden = !nav || durum.takip;
   $('sapma').hidden = !(nav && durum.simAcik);
   $('sim-hiz-alan').hidden = !durum.simAcik;
+  $('durak-ekle').hidden = mod !== 'onizleme';
+  $('durak-ekle').textContent = durum.durakEkle ? 'Durak ekleniyor: arayın ya da dokunun' : 'Durak ekle';
+  $('durak-ekle').classList.toggle('etkin', durum.durakEkle);
   $('ses').textContent = durum.ses ? 'Ses: açık' : 'Ses: kapalı';
   document.documentElement.style.setProperty('--alt-yukseklik', `${altYukseklik()}px`);
 }
@@ -695,6 +743,14 @@ function konumGeldi(k) {
 
   const kalanM = Math.max(0, rota.toplam - o.ilerleme);
   if (yolda && kalanM <= VARIS_ESIK_M) { navBitir(true); return; }
+  // Ara duraklar: durak noktasina gelince bir sonraki duraga gecilir
+  const bacak = durum.gecilenDurak - rota.ilkDurak;
+  if (yolda && bacak < rota.bacakSonM.length - 1 && o.ilerleme >= rota.bacakSonM[bacak] - VARIS_ESIK_M) {
+    durum.gecilenDurak += 1;
+    const durak = durum.duraklar[durum.gecilenDurak - 1];
+    soyle(`${durum.gecilenDurak}. durağa ulaştınız${durak?.ad ? `: ${durak.ad}` : ''}.`, true);
+    duraklariCiz();
+  }
 
   const i = siradakiManevra(rota, o.ilerleme);
   const manevraM = Math.max(0, rota.manevralar[i].basM - o.ilerleme);
@@ -748,7 +804,7 @@ async function yenidenRota(k) {
   manevraKartiMesaj('Yeni rota', 'Rota yeniden hesaplanıyor...');
   soyle('Rota yeniden hesaplanıyor.', true);
   try {
-    const yeni = await rotaIste(k, durum.hedef);
+    const yeni = await rotaIste(k, kalanDuraklar(), durum.gecilenDurak);
     if (durum.mod !== 'nav') return;
     rotaAyarla(yeni);
     durum.sapmaSayac = 0;
@@ -792,17 +848,46 @@ function simDurdur() {
 
 /* ---------- Akis ---------- */
 
-/** Hedef secilince baslangictan (konum ya da harita merkezi) rota onizlemesi hesaplar. */
+/**
+ * Secilen yer hedef olur; "Durak ekle" acikken mevcut duraklarin sonuna eklenir (onceki hedef ara durak olur).
+ * Ardindan baslangictan (konum ya da harita merkezi) rota onizlemesi hesaplanir.
+ */
 async function hedefSec(hedef) {
+  if (durum.durakEkle && durum.duraklar.length) durum.duraklar.push(hedef);
+  else durum.duraklar = [hedef];
+  durum.durakEkle = false;
+  durum.gecilenDurak = 0;
   durum.hedef = hedef;
   $('sonuclar').replaceChildren();
-  $('hedef-ara').value = hedef.ad;
-  veriYaz('hedef', nokta([hedef.lon, hedef.lat]));
+  $('hedef-ara').value = '';
+  duraklariCiz();
+  duraklarListesiYaz();
+  await onizlemeHesapla();
+}
+
+/** Plan kartindaki durak listesi (sirali, silinebilir). */
+function duraklarListesiYaz() {
+  const liste = $('durak-listesi');
+  liste.replaceChildren();
+  durum.duraklar.forEach((d, i) => {
+    const sil = el('button', { type: 'button', sinif: 'durak-sil', 'aria-label': `${i + 1}. duragi kaldir`, metin: 'Kaldır' });
+    sil.addEventListener('click', () => durakSil(i));
+    const son = i === durum.duraklar.length - 1;
+    liste.append(el('li', {}, el('span', { sinif: 'durak-no', metin: son ? 'Hedef' : `${i + 1}.` }), el('span', { sinif: 'durak-ad', metin: d.ad }), sil));
+  });
+}
+
+async function durakSil(i) {
+  durum.duraklar.splice(i, 1);
+  if (!durum.duraklar.length) { hedefTemizle(); return; }
+  durum.hedef = durum.duraklar.at(-1);
+  duraklariCiz();
+  duraklarListesiYaz();
   await onizlemeHesapla();
 }
 
 async function onizlemeHesapla() {
-  if (!durum.hedef) return;
+  if (!durum.duraklar.length) return;
   let baslangic = durum.konum;
   if (!baslangic) {
     const c = harita.getCenter();
@@ -810,7 +895,7 @@ async function onizlemeHesapla() {
   }
   planMesaj('Rota hesaplanıyor...');
   try {
-    const rota = await rotaIste(baslangic, durum.hedef);
+    const rota = await rotaIste(baslangic, durum.duraklar);
     rotaAyarla(rota);
     durum.mod = 'onizleme';
     planMesaj(durum.konum ? '' : 'Konum yok: başlangıç harita merkezi alındı. Simülasyonla deneyebilirsiniz.', durum.konum ? '' : 'uyari');
@@ -824,11 +909,10 @@ async function onizlemeHesapla() {
 }
 
 function hedefTemizle() {
-  durum.hedef = null;
-  durum.rota = null;
-  durum.mod = 'plan';
+  Object.assign(durum, { hedef: null, duraklar: [], gecilenDurak: 0, durakEkle: false, rota: null, mod: 'plan' });
   for (const ad of Object.keys(durum.cizim)) veriYaz(ad, BOS);
   $('hedef-ara').value = '';
+  duraklarListesiYaz();
   planMesaj('');
   arayuzGuncelle();
 }
@@ -848,6 +932,8 @@ async function ekranAcikTut(ac) {
 
 async function navBaslat() {
   if (!durum.rota) return;
+  durum.gecilenDurak = 0;
+  duraklariCiz();
   if (!durum.simAcik) {
     if (!durum.konum) {
       planMesaj('Konum henüz alınmadı. Konum iznini verin ya da simülasyonu açın.', 'uyari');
@@ -857,7 +943,7 @@ async function navBaslat() {
     // Onizleme baska bir baslangictan hesaplandiysa guncel konumdan yeniden hesapla
     if (mesafeM([durum.konum.lon, durum.konum.lat], durum.rota.koord[0]) > BASLANGIC_FARK_M) {
       try {
-        rotaAyarla(await rotaIste(durum.konum, durum.hedef));
+        rotaAyarla(await rotaIste(durum.konum, durum.duraklar));
       } catch (hata) {
         console.warn('Başlangıç rotası alınamadı', hata);
         planMesaj(hata instanceof HataMesaji ? hata.message : 'Rota alınamadı.', 'hata');
@@ -893,13 +979,12 @@ function navBitir(varildi = false) {
   }
   durum.mod = 'onizleme';
   durum.takip = true;
+  durum.gecilenDurak = 0;
   arayuzGuncelle();
-  if (durum.rota) {
-    veriYaz('rota-kalan', cizgi(durum.rota.koord));
-    veriYaz('manevra-nokta', BOS);
-    ozetYaz(durum.rota.sure, durum.rota.toplam, durum.konum?.hiz);
-    rotayaSigdir(durum.rota);
-  }
+  veriYaz('manevra-nokta', BOS);
+  duraklariCiz();
+  // Yolda yeniden rota yalniz kalan duraklari kapsayabilir; onizleme tum duraklarla yeniden hesaplanir
+  onizlemeHesapla();
 }
 
 /* ---------- Arama ---------- */
@@ -947,9 +1032,9 @@ async function haritaDokunma(olay) {
   try {
     const v = await api(`/v1/ters-arama?lat=${lat.toFixed(6)}&lon=${lng.toFixed(6)}`);
     const o = v.features?.[0]?.properties;
-    if (o?.name && durum.hedef === hedef) {
+    if (o?.name && durum.duraklar.includes(hedef)) {
       hedef.ad = [o.name, o.housenumber].filter(Boolean).join(' ');
-      $('hedef-ara').value = hedef.ad;
+      duraklarListesiYaz();
     }
   } catch (hata) {
     console.warn('Ters arama başarısız', hata);
@@ -1030,6 +1115,11 @@ function olaylariBagla() {
     temaUygula();
     // Stil tamamen yenilenir; rota, hedef ve manevra katmanlari style.load ile geri eklenir
     harita.setStyle(stilKur(), { diff: false });
+  });
+  $('durak-ekle').addEventListener('click', () => {
+    durum.durakEkle = !durum.durakEkle;
+    arayuzGuncelle();
+    if (durum.durakEkle) $('hedef-ara').focus();
   });
   $('baslat').addEventListener('click', navBaslat);
   $('iptal').addEventListener('click', hedefTemizle);
@@ -1117,6 +1207,64 @@ async function baslat() {
   surumGoster();
   sesDenetle();
   konumIzlemeBaslat();
+  await baglantidanAc();
+}
+
+/**
+ * Sayfa baglantiyla acildiysa duraklari hazirlar (baska uygulamalardan "bu adrese git" icin):
+ *   navigasyon.html?duraklar=41.01,28.97;40.99,29.02&adlar=Market|Musteri&profil=motosiklet
+ *   navigasyon.html?hedef=40.99,29.02&ad=Musteri
+ *   navigasyon.html?baglanti=<Google / Yandex / Apple / Waze baglantisi>
+ * sim=1 simulasyonu acar. Ses icin tarayici bir dokunus ister; navigasyon "Baslat" ile baslar.
+ */
+async function baglantidanAc() {
+  const p = new URLSearchParams(location.search);
+  if (COSTING[p.get('profil')]) {
+    durum.profil = p.get('profil');
+    $('profil').value = durum.profil;
+  }
+  if (p.get('sim') === '1') {
+    durum.simAcik = true;
+    $('sim').checked = true;
+    arayuzGuncelle();
+  }
+  const adlar = (p.get('adlar') || p.get('ad') || '').split('|');
+  let noktalar = [];
+  const ham = p.get('duraklar') || p.get('hedef');
+  if (ham) {
+    noktalar = ham.split(';').map((s) => s.split(',').map(Number)).filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b)
+      && Math.abs(a) <= 90 && Math.abs(b) <= 180).map(([lat, lon]) => ({ lat, lon }));
+  } else if (p.get('baglanti')) {
+    try {
+      noktalar = (await api(`/v1/baglanti/coz?adres=${encodeURIComponent(p.get('baglanti'))}`)).noktalar;
+      // Baglantinin ilk noktasi cihazin bulundugu yerse (baslangic) durak sayilmaz
+      if (noktalar.length > 1 && durum.konum && mesafeM([durum.konum.lon, durum.konum.lat], [noktalar[0].lon, noktalar[0].lat]) < 300) noktalar.shift();
+    } catch (hata) {
+      console.warn('Harita baglantisi cozulemedi', hata);
+      planMesaj(hata instanceof HataMesaji ? hata.message : 'Bağlantı açılamadı.', 'hata');
+      return;
+    }
+  }
+  if (!noktalar.length) return;
+  durum.duraklar = noktalar.map((n, i) => ({ ...n, ad: adlar[i] || (i === noktalar.length - 1 ? 'Hedef' : `${i + 1}. durak`) }));
+  durum.hedef = durum.duraklar.at(-1);
+  duraklariCiz();
+  duraklarListesiYaz();
+  // Onizleme mumkunse gercek konumdan baslasin: ilk GPS olcumu icin kisa sure beklenir
+  if (!durum.konum) {
+    planMesaj('Konum bekleniyor...');
+    await konumBekle(6000);
+  }
+  await onizlemeHesapla();
+}
+
+/** Ilk konum olcumunu en fazla sureMs bekler (gelmezse devam edilir). */
+function konumBekle(sureMs) {
+  return new Promise((coz) => {
+    const bas = Date.now();
+    const bak = () => (durum.konum || Date.now() - bas > sureMs ? coz() : setTimeout(bak, 250));
+    bak();
+  });
 }
 
 baslat();

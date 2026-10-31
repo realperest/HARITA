@@ -372,6 +372,68 @@ def calistir() -> None:
         assert paylasim.get("cizgi"), "onceki rota kontrolu basarisiz"
         esit(api("POST", "/v1/adres/rota-boyunca", {"koordinatlar": paylasim["cizgi"], "tampon_m": 300}))
 
+    # ---------- Proje entegrasyonu icin eklenen uclar ----------
+    @kontrol("adres: kapi aramasinda yakin olan once")
+    def _():
+        # Cerkezkoy'de bilinen bir kapi: yakinliktan bagimsiz ad cok yaygin (Ataturk Caddesi)
+        n = api("GET", "/v1/adres/nokta?lat=41.2850&lon=28.0000").json()
+        kapi = next((k for k in n.get("kapilar", []) if k["ek"].get("sokak")), None)
+        assert kapi, "ornek kapi yok"
+        q = f"{kapi['ek']['sokak']} {kapi['ek']['kapi_no']}"
+        v = api("GET", "/v1/adres/ara?" + urllib.parse.urlencode({"q": q, "tur": "kapi", "lat": 41.285, "lon": 28.0})).json()
+        mesafeler = [x["mesafe_m"] for x in v]
+        assert mesafeler and mesafeler[0] < 1000, f"{q}: {mesafeler[:5]}"
+        sinirli = api("GET", "/v1/adres/ara?" + urllib.parse.urlencode({"q": q, "tur": "kapi", "lat": 41.285, "lon": 28.0, "yaricap_m": 20000})).json()
+        assert all(x["mesafe_m"] <= 20000 for x in sinirli), "yaricap siniri uygulanmadi"
+        return f"{q}: {len(v)} sonuc, ilk {mesafeler[0]} m"
+
+    @kontrol("adres: ilceye bagli (mahallesiz) sokaklar")
+    def _():
+        y = api("GET", f"/v1/adres/alt?ust=ilce:{paylasim['ilce']}&cocuk=sokak&limit=1000")
+        esit(y)
+        v = y.json()
+        assert all(x["tur"] == "sokak" for x in v), "sokak disi oge dondu"
+        return f"{len(v)} yol"
+
+    @kontrol("adres: toplu getirme ve kaynak anahtari")
+    def _():
+        y = api("POST", "/v1/adres/toplu", {"ogeler": [{"tur": "sokak", "id": paylasim["sokak"]}, {"tur": "ilce", "id": paylasim["ilce"]}]})
+        esit(y)
+        v = y.json()
+        assert len(v) == 2 and all(x.get("kaynak") for x in v), "kayit ya da kaynak anahtari eksik"
+        k = api("POST", "/v1/adres/kaynak", {"anahtarlar": [x["kaynak"] for x in v]})
+        esit(k)
+        assert {(x["tur"], x["id"]) for x in k.json()} >= {(x["tur"], x["id"]) for x in v}, "kaynak anahtariyla eslesmedi"
+
+    @kontrol("adres: sokaktaki en yakin kapi")
+    def _():
+        n = api("GET", "/v1/adres/nokta?lat=41.2850&lon=28.0000").json()
+        kapi = next((k for k in n.get("kapilar", []) if k["ek"].get("sokak_id")), None)
+        assert kapi, "sokaga bagli ornek kapi yok"
+        y = api("GET", f"/v1/adres/sokak/{kapi['ek']['sokak_id']}/en-yakin-kapi?lat=41.2850&lon=28.0000&yaricap_m=200")
+        esit(y)
+        return f"{y.json()['ad']} ({y.json()['mesafe_m']} m)"
+
+    @kontrol("rota: /v1/rota 30 durak")
+    def _():
+        noktalar = [{"lat": 40.985 + (i // 6) * 0.006, "lon": 29.035 + (i % 6) * 0.006} for i in range(30)]
+        esit(api("POST", "/v1/rota", {"noktalar": noktalar, "profil": "motosiklet", "geometri": False}))
+
+    @kontrol("yol: konumdaki yol bilgisi")
+    def _():
+        y = api("GET", "/v1/yol/nokta?lat=41.0369&lon=28.9850")
+        esit(y)
+        v = y.json()
+        assert v["yol"]["sinif"] and v["il"], "yol sinifi ya da il yok"
+        return f"{v['yol']['adlar'][:1]} {v['yol']['sinif']}, isik={v['yol']['trafik_isigi']}, {v['ilce']}"
+
+    @kontrol("yol: harita baglantisi cozme")
+    def _():
+        y = api("GET", "/v1/baglanti/coz?" + urllib.parse.urlencode({"adres": "https://www.google.com/maps/dir/41.0082,28.9784/40.9909,29.0237/"}))
+        esit(y)
+        assert len(y.json()["noktalar"]) == 2, "nokta sayisi yanlis"
+        esit(api("GET", "/v1/baglanti/coz?" + urllib.parse.urlencode({"adres": "https://yabanci.example/x"})), 422)
+
     # ---------- Uyumlu uclar ----------
     @kontrol("uyumlu: Nominatim search + reverse")
     def _():
@@ -399,11 +461,13 @@ def calistir() -> None:
         def _():
             esit(yonetim("GET", "/yonetim/veritabani/ozet"))
 
-        @kontrol("yonetim: salt okunur SQL yazmayi reddeder")
+        @kontrol("yonetim: salt okunur SQL okur, yazmayi reddeder")
         def _():
+            okuma = yonetim("POST", "/yonetim/veritabani/sql", {"sorgu": "SELECT 1 AS bir"})
+            esit(okuma)  # alan adi dogru mu: okuma 200 donmeli, yoksa asagidaki red yanlis nedenle gecer
             # Kabul edilse bile zararsiz: oturuma ozel gecici tablo (canli veriye dokunmaz)
-            y = yonetim("POST", "/yonetim/veritabani/sql", {"sql": "CREATE TEMP TABLE canli_test_gecici (x int)"})
-            assert y.durum >= 400, f"yazma sorgusu kabul edildi (HTTP {y.durum})"
+            y = yonetim("POST", "/yonetim/veritabani/sql", {"sorgu": "CREATE TEMP TABLE canli_test_gecici (x int)"})
+            assert y.durum >= 400 and y.durum != 422, f"yazma sorgusu reddedilmedi ya da istek gecersiz (HTTP {y.durum})"
 
     # ---------- Deneme sayfalari ----------
     if DENEME:

@@ -34,6 +34,13 @@ Aylik: `harita_karo` hacmindeki `turkiye.pmtiles` dosyasini silip tiles servisin
 `force_rebuild=True` ile tek seferlik yeniden baslatma. Adres / yerlesim verisini `veri` servisi `GUNCELLEME_GUN` (30) gunde bir
 kendisi tazeler. Karo ve rota tazelemesini zamanlanmis isle otomatiklestirmek ayri bir gelistirmedir.
 
+## Yukseklik (rakim) verisi
+
+Kapali kuruludur (disk ve yeniden kurulum suresi icin). Gerekirse: Coolify'da `harita` uygulamasina `ROTA_YUKSEKLIK=True` ve
+`ROTA_YENIDEN_KUR=True` eklenip yeniden dagitilir; rota servisi Turkiye icin yukseklik karolarini indirip cizgeyi yeniden kurar
+(~1 saat, bu surede rota servisi yanit vermez, ek disk ~2-4 GB). Kurulum bitince `ROTA_YENIDEN_KUR=False` yapilip tekrar dagitilir
+(aksi halde her yeniden baslatmada kurulum tekrarlanir). Sonra `/valhalla/height` ve rotalardaki egim bilgisi dolar.
+
 ## Projeleri baglamak
 
 `python scripts/proje-bagla.py <ad>` (ayrinti: [ENTEGRASYON.md](ENTEGRASYON.md)).

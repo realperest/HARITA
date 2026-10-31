@@ -128,11 +128,57 @@ class HaritaIstemcisi:
         return await self._istek("GET", "/v1/ters-arama", {"lat": enlem, "lon": boylam})
 
     async def adres_ara(self, metin: str, tur: str | None = None, ust_id: int | None = None, yakin: Nokta | None = None,
-                        limit: int = 10) -> list[dict]:
-        """Kapi numarasi, sokak, bina, yer, yerlesim aramasi. tur: kapi | sokak | bina | yer | yerlesim."""
+                        limit: int = 10, yaricap_m: int | None = None) -> list[dict]:
+        """Kapi numarasi, sokak, bina, yer, yerlesim aramasi. tur: kapi | sokak | bina | yer | yerlesim.
+        yakin verilirse esit eslesmelerde yakin olan one gelir; yaricap_m (yakin gerekir) bu yaricap disini eler."""
         n = _nokta(yakin) if yakin else {}
         return await self._istek("GET", "/v1/adres/ara", {"q": metin, "tur": tur, "ust_id": ust_id, "lat": n.get("lat"),
-                                                          "lon": n.get("lon"), "limit": limit})
+                                                          "lon": n.get("lon"), "limit": limit, "yaricap_m": yaricap_m})
+
+    async def toplu(self, ogeler: Iterable[tuple[str, int]]) -> list[dict]:
+        """(tur, id) ogeleri tek istekte: ad, adres, zincir kimlikleri (ust) ve kaynak anahtari. En fazla 500.
+        tur: sokak, kapi, yer, bina ya da il, ilce, mahalle_koy ... Bulunamayan oge donmez."""
+        return await self._istek("POST", "/v1/adres/toplu", govde={"ogeler": [{"tur": t, "id": i} for t, i in ogeler]})
+
+    async def kaynaktan(self, anahtarlar: Iterable[str]) -> list[dict]:
+        """OSM kaynak anahtarindan (osm:node:.. / osm:way:.. / osm:relation:..) HARITA kayitlari. En fazla 500."""
+        return await self._istek("POST", "/v1/adres/kaynak", govde={"anahtarlar": list(anahtarlar)})
+
+    async def en_yakin_kapi(self, sokak_id: int, enlem: float, boylam: float, yaricap_m: int = 100) -> dict | None:
+        """Secilen sokaktaki en yakin kapi numarasi (pin icin oneri); yaricapta yoksa None."""
+        try:
+            return await self._istek("GET", f"/v1/adres/sokak/{sokak_id}/en-yakin-kapi", {"lat": enlem, "lon": boylam, "yaricap_m": yaricap_m})
+        except HaritaHatasi as hata:
+            if hata.durum == 404:
+                return None
+            raise
+
+    async def ilce_sokaklari(self, ilce_id: int, limit: int = 200, atla: int = 0) -> list[dict]:
+        """Hicbir mahalle / koy sinirina dusmeyip dogrudan ilceye bagli yollar."""
+        return await self.adres_alt(f"ilce:{ilce_id}", cocuk="sokak", limit=limit, atla=atla)
+
+    # ---------- Yol bilgisi ve baglantilar ----------
+
+    async def yol_bilgisi(self, enlem: float, boylam: float, profil: Profil = "auto", yon: int | None = None) -> dict:
+        """Konumdaki yolun ozellikleri (sinif, hiz siniri, trafik isigi, dur levhasi, tunel, kopru, gise) ve il / ilce."""
+        return await self._istek("GET", "/v1/yol/nokta", {"lat": enlem, "lon": boylam, "profil": profil, "yon": yon})
+
+    async def baglanti_coz(self, adres: str) -> list[dict]:
+        """Google / Yandex / Apple / Waze / OSM harita baglantisindaki noktalar [{lat, lon}] (kisa baglantilar dahil)."""
+        return (await self._istek("GET", "/v1/baglanti/coz", {"adres": adres}))["noktalar"]
+
+    @staticmethod
+    def navigasyon_baglantisi(duraklar: Iterable[Nokta], adlar: Iterable[str] | None = None, profil: str = "araba",
+                              sayfa: str | None = None) -> str:
+        """HARITA navigasyon ekranini duraklarla acan baglanti (kurye / surucu icin Yandex / Google yerine).
+        profil: araba | motosiklet | yaya. sayfa: HARITA_NAVIGASYON_ADRESI ortam degiskeni ya da deneme sayfasi."""
+        from urllib.parse import urlencode
+        taban = sayfa or os.environ.get("HARITA_NAVIGASYON_ADRESI", "https://harita-deneme.89.45.45.152.sslip.io/navigasyon.html")
+        noktalar = ";".join(f"{n['lat']:.6f},{n['lon']:.6f}" for n in map(_nokta, duraklar))
+        parametre = {"duraklar": noktalar, "profil": profil}
+        if adlar:
+            parametre["adlar"] = "|".join(a.replace("|", " ") for a in adlar)
+        return f"{taban}?{urlencode(parametre)}"
 
     async def adres_nokta(self, enlem: float, boylam: float, yaricap_m: int = 150) -> dict:
         """Pin -> adres: adres metni, il / ilce / mahalle, en yakin sokak, kapi ve yerler."""

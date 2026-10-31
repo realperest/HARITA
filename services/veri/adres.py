@@ -138,31 +138,44 @@ GECICI_SEMA = [
     "CREATE UNLOGGED TABLE IF NOT EXISTS gecici_sokak_parca (ad text, ad_arama text, sinif_id smallint, wkb text, mahalle_id bigint, geom geometry(LineString, 4326))",
     "CREATE UNLOGGED TABLE IF NOT EXISTS gecici_yer (kaynak_anahtari text, tur_id smallint, ad text, ad_arama text, lon float8, lat float8)",
     "CREATE UNLOGGED TABLE IF NOT EXISTS gecici_kapi (kaynak_anahtari text, kapi_no text, kapi_no_arama text, sokak_ad text, sokak_ad_arama text, lon float8, lat float8)",
+    # Hicbir mahalle sinirina dusmeyen sokaklar ilceye baglanir (gateway semasi 006 ile ayni; once hangisi calisirsa kurar)
+    "ALTER TABLE gecici_sokak_parca ADD COLUMN IF NOT EXISTS ilce_id bigint",
+    "ALTER TABLE sokak ADD COLUMN IF NOT EXISTS ilce_id BIGINT REFERENCES yerlesim (id) ON DELETE SET NULL",
 ]
 
-# Mahalle eslemesi geography yerine geometry + GiST dizinli gecici tabloda yapilir (Turkiye olceginde cok daha hizli)
+# Mahalle / ilce eslemesi geography yerine geometry + GiST dizinli gecici tabloda yapilir (Turkiye olceginde cok daha hizli)
 MAHALLE_HAZIRLA = [
     "DROP TABLE IF EXISTS gecici_mahalle",
     "CREATE UNLOGGED TABLE gecici_mahalle AS SELECT id, sinir::geometry AS g FROM yerlesim WHERE tur_id = 3 AND aktif_mi AND sinir IS NOT NULL",
     "CREATE INDEX ix_gecici_mahalle_g ON gecici_mahalle USING gist (g)",
     "ANALYZE gecici_mahalle",
+    "DROP TABLE IF EXISTS gecici_ilce",
+    "CREATE UNLOGGED TABLE gecici_ilce AS SELECT id, sinir::geometry AS g FROM yerlesim WHERE tur_id = 2 AND aktif_mi AND sinir IS NOT NULL",
+    "CREATE INDEX ix_gecici_ilce_g ON gecici_ilce USING gist (g)",
+    "ANALYZE gecici_ilce",
 ]
 
+# Eslemede kullanilan gecici sinir tablolari; is bitince silinir (diskte artik birakmamak icin)
+MAHALLE_TEMIZLE = ["DROP TABLE IF EXISTS gecici_mahalle", "DROP TABLE IF EXISTS gecici_ilce"]
+
 MAHALLE_BUL = """(SELECT m.id FROM gecici_mahalle m WHERE ST_Covers(m.g, ({nokta})::geometry) LIMIT 1)"""
+ILCE_BUL = """(SELECT i.id FROM gecici_ilce i WHERE ST_Covers(i.g, ({nokta})::geometry) LIMIT 1)"""
 
 ISLEM_SQL = [
     # 1) sokak parcalarinin geometrisi ve mahallesi
     "UPDATE gecici_sokak_parca SET geom = ST_SetSRID(ST_GeomFromWKB(decode(wkb, 'hex')), 4326), wkb = NULL",
     "DELETE FROM gecici_sokak_parca WHERE geom IS NULL OR ST_NPoints(geom) < 2",
     "UPDATE gecici_sokak_parca SET mahalle_id = " + MAHALLE_BUL.format(nokta="ST_LineInterpolatePoint(geom, 0.5)"),
-    # 2) ayni mahalle + ayni ad = tek sokak
-    """INSERT INTO sokak (kaynak_anahtari, ad, ad_arama, sinif_id, mahalle_id, cizgi, merkez, surum_id, aktif_mi)
-       SELECT 'sokak:' || COALESCE(mahalle_id::text, '0') || ':' || ad_arama, min(ad), ad_arama, min(sinif_id), mahalle_id,
-              ST_Multi(ST_LineMerge(ST_Collect(geom)))::geography,
+    # mahalle sinirina dusmeyen parcalar ilceye baglanir; aksi halde ulke capinda ayni adli yollar tek kayitta birlesirdi
+    "UPDATE gecici_sokak_parca SET ilce_id = " + ILCE_BUL.format(nokta="ST_LineInterpolatePoint(geom, 0.5)") + " WHERE mahalle_id IS NULL",
+    # 2) ayni mahalle (yoksa ayni ilce) + ayni ad = tek sokak
+    """INSERT INTO sokak (kaynak_anahtari, ad, ad_arama, sinif_id, mahalle_id, ilce_id, cizgi, merkez, surum_id, aktif_mi)
+       SELECT 'sokak:' || COALESCE(mahalle_id::text, 'i' || ilce_id::text, '0') || ':' || ad_arama, min(ad), ad_arama, min(sinif_id),
+              mahalle_id, ilce_id, ST_Multi(ST_LineMerge(ST_Collect(geom)))::geography,
               ST_ClosestPoint(ST_Collect(geom), ST_Centroid(ST_Collect(geom)))::geography, %(surum)s, TRUE
-         FROM gecici_sokak_parca GROUP BY mahalle_id, ad_arama
-       ON CONFLICT (kaynak_anahtari) DO UPDATE SET ad = EXCLUDED.ad, sinif_id = EXCLUDED.sinif_id, cizgi = EXCLUDED.cizgi,
-            merkez = EXCLUDED.merkez, surum_id = EXCLUDED.surum_id, aktif_mi = TRUE""",
+         FROM gecici_sokak_parca GROUP BY mahalle_id, ilce_id, ad_arama
+       ON CONFLICT (kaynak_anahtari) DO UPDATE SET ad = EXCLUDED.ad, sinif_id = EXCLUDED.sinif_id, ilce_id = EXCLUDED.ilce_id,
+            cizgi = EXCLUDED.cizgi, merkez = EXCLUDED.merkez, surum_id = EXCLUDED.surum_id, aktif_mi = TRUE""",
     # 3) yer isaretleri
     """INSERT INTO yer_isareti (tur_id, kaynak_anahtari, ad, ad_arama, konum, mahalle_id, surum_id, aktif_mi)
        SELECT g.tur_id, g.kaynak_anahtari, g.ad, g.ad_arama, k.konum, """ + MAHALLE_BUL.format(nokta="k.konum") + """, %(surum)s, TRUE
@@ -191,8 +204,16 @@ def tablo_bekle(baglanti: psycopg.Connection) -> None:
 
 
 def gerekli_mi(baglanti: psycopg.Connection, guncelleme_gun: int, zorla: bool) -> bool:
-    """Son basarili adres yuklemesi yoksa veya guncelleme_gun'den eskiyse True."""
+    """Son basarili adres yuklemesi yoksa, guncelleme_gun'den eskiyse veya eski bicimli veri varsa True."""
     if zorla:
+        return True
+    # Eski yukleme mahallesiz sokaklari ulke capinda tek kayitta birlestiriyordu ('sokak:0:<ad>'); varsa bir kez yeniden yuklenir
+    # Yeni bicimde ilceye bagli kayitlar 'sokak:i<ilce>:<ad>' olur; hic yoksa ve birlesik kayit varsa veri eski bicimdedir
+    eski = baglanti.execute(
+        "SELECT EXISTS (SELECT 1 FROM sokak WHERE aktif_mi AND kaynak_anahtari LIKE 'sokak:0:%') "
+        "AND NOT EXISTS (SELECT 1 FROM sokak WHERE aktif_mi AND kaynak_anahtari LIKE 'sokak:i%')").fetchone()[0]
+    if eski:
+        log.info("Eski bicimli mahallesiz sokak kayitlari var; adres verisi yeniden yuklenecek.")
         return True
     son = baglanti.execute(
         """SELECT bitis < now() - make_interval(days => %s) FROM adres_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
@@ -277,6 +298,8 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
         baglanti.commit()
         for tablo in ("sokak", "yer_isareti", "kapi_numarasi"):
             baglanti.execute(f"ANALYZE {tablo}")
+        for sorgu in MAHALLE_TEMIZLE:
+            baglanti.execute(sorgu)
         baglanti.commit()
         log.info("Adres tamam: sokak=%s yer=%s kapi=%s (surum %s).", *sayilar, surum)
     except Exception as hata:

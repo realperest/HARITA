@@ -17,7 +17,7 @@ class Ayarlar(BaseSettings):
     UPSTREAM_ZAMAN_ASIMI_SN: float = 15.0
     ANAHTAR_ONBELLEK_SN: int = 60
     MATRIS_MAKS_NOKTA: int = 50
-    ROTA_MAKS_NOKTA: int = 20
+    ROTA_MAKS_NOKTA: int = 50
     LOG_SEVIYESI: str = "INFO"
 
 

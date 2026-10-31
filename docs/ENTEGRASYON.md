@@ -67,12 +67,19 @@ const rota = await h.rota([{ lat: 40.99, lon: 29.02 }, { lat: 40.98, lon: 29.03 
 |---|---|---|
 | Karo | `GET {karo}/tiles/turkiye/{z}/{x}/{y}.mvt`, TileJSON `{karo}/tiles/turkiye.json` | Anahtar istemez; `IZINLI_KOKEN_REGEX` ile kisitli. Yazi tipi ve simgeler `{karo}/assets/...` |
 | Yapilandirma | `GET /v1/yapilandirma` | Karo, yazi tipi, simge adresleri |
-| Rota | `POST /v1/rota` | Profil: auto, motosiklet, bisiklet, yaya; GeoJSON cizgi |
+| Rota | `POST /v1/rota` | Profil: auto, motosiklet, bisiklet, yaya; en fazla 50 nokta; GeoJSON cizgi |
+| Navigasyon ekrani | `navigasyon.html?duraklar=lat,lon;lat,lon&adlar=A|B&profil=araba` (ya da `hedef=`, `baglanti=`) | Sesli Turkce adim adim, cok duraklı; Yandex / Google yonlendirmesi yerine baglanti olarak verilir (`navigasyon_baglantisi()` / `navigasyonBaglantisi()`) |
 | Matris | `POST /v1/matris` | En fazla 50 x 50 |
 | OSRM uyumlu | `GET /osrm/route/v1/{profil}/{lon,lat;lon,lat}` | Mevcut OSRM kodu yalniz adres degistirir |
 | Valhalla tam API | `POST /valhalla/{route,optimized_route,isochrone,sources_to_targets,trace_route,trace_attributes,locate,expansion,status}` | Govde Valhalla'ya aynen gider: izokron, harita eslestirme, optimize rota vb. |
 | Yerlesim | `GET /v1/yerlesim/ara`, `/nokta`, `/yakin`, `/{id}`, `/{id}/alt` | Il, ilce, mahalle / koy ve sehir-kasaba-koy-mezra-semt merkezleri |
-| Adres ara | `GET /v1/adres/ara?q=` | Kapi numarasi (`namik kemal bulvari 12`), sokak, yer, yerlesim; `lat/lon` ile yakinlik, `tur`, `ust_id` filtre |
+| Adres ara | `GET /v1/adres/ara?q=` | Kapi numarasi (`namik kemal bulvari 12`), sokak, yer, yerlesim; `lat/lon` ile esit eslesmelerde yakin olan once, `yaricap_m` ile yaricap disi elenir, `tur`, `ust_id` filtre |
+| Toplu getir | `POST /v1/adres/toplu` `{ogeler: [{tur, id}]}` | En fazla 500 oge tek istekte: ad, adres, zincir kimlikleri (`ust`: mahalle_id, ilce_id, il_id), kaynak anahtari. Kayitli adreslerin adlari ve secim tutarliligi icin |
+| Kaynak anahtari | `POST /v1/adres/kaynak` `{anahtarlar: [...]}` | OSM kimliginden (`osm:node:..`, `osm:way:..`, `osm:relation:..`) HARITA kaydi; tum kayitlar `kaynak` alanini tasir |
+| En yakin kapi | `GET /v1/adres/sokak/{id}/en-yakin-kapi?lat&lon` | Pin icin kapi numarasi onerisi (secilen sokakta) |
+| Ilceye bagli yollar | `GET /v1/adres/alt?ust=ilce:{id}&cocuk=sokak` | Hicbir mahalle / koy sinirina dusmeyen yollar (koy yollari, cevre yollari) |
+| Yol bilgisi | `GET /v1/yol/nokta?lat&lon[&yon&profil]` | Yol sinifi, hiz siniri, tahmini hiz, serit, trafik isigi / dur levhasi (kavsakta) ve kavsaga kalan mesafe, tunel, kopru, gise, il / ilce. Surus analizi (ani durma vb.) icin, Overpass gerekmez |
+| Baglanti cozme | `GET /v1/baglanti/coz?adres=` | Google / Yandex / Apple / Waze / OSM baglantisindaki noktalar (maps.app.goo.gl kisa baglantilari dahil) |
 | Ters arama | `GET /v1/adres/nokta?lat=&lon=` | Adres metni, il / ilce / mahalle, en yakin sokak, kapi, yerler |
 | Yer katmani | `GET /v1/adres/yerler?bati&guney&dogu&kuzey&tur=` | Haritada nokta olarak cizmek icin GeoJSON |
 | Sokak / kapi | `GET /v1/adres/mahalle/{id}/sokaklar`, `/v1/adres/sokak/{id}?cizgi=true`, `/v1/adres/sokak/{id}/kapilar` | Acilir liste (ilce > mahalle > sokak > kapi) |
@@ -99,8 +106,17 @@ Hazir: `siparis-sunucu` ve `siparis-web` kayitlari (alan adlari: `isletme`, `mus
   cadde / sokak `GET /v1/adres/mahalle/{mahalle}/sokaklar`, kapi `GET /v1/adres/sokak/{sokak}/kapilar`.
 - **Pin -> adres:** `GET /v1/adres/nokta`. **Metin -> pin:** `GET /v1/adres/ara`.
 - **Haritadaki renkli yer noktalari:** `GET /v1/adres/yerler` (z14+).
-- **SIPARIS'te kalanlar:** teslimat bolgeleri, musteri adresleri, musteriden ogrenilen kapi numaralari (is mantigi). Veri kimligi eslemesi icin
-  HARITA kayitlari `kaynak_anahtari` (osm:node:123 / osm:way:456 / sokak:...) tasir; SIPARIS'in OSM kaynakli satirlariyla ayni anahtarlar eslesir.
+- **SIPARIS'te kalanlar:** teslimat bolgeleri, musteri adresleri, musteriden ogrenilen kapi numaralari (is mantigi).
+- **Mevcut adreslerin eslenmesi (gecis):** Her HARITA kaydi `kaynak` alanini tasir.
+  - Kapi numarasi, yer isareti, il / ilce / mahalle: SIPARIS ile ayni OSM bicimi (`osm:node:123`, `osm:way:456`, `osm:relation:789`);
+    `POST /v1/adres/kaynak` ile toplu eslenir.
+  - Sokak: HARITA ayni mahalledeki ayni adli parcalari tek sokakta birlestirir (`sokak:<mahalle_id>:<ad>`, mahallesizse
+    `sokak:i<ilce_id>:<ad>`), bu yuzden SIPARIS'in yol kayitlari kimlikle degil ad + konumla eslenir:
+    `GET /v1/adres/ara?q=<yol adi>&tur=sokak&lat=<yolun merkezi>&lon=...&yaricap_m=500` ilk sonucu.
+  - Eslenen kimlikler bir kez SIPARIS tablosuna yazilir; sonraki gosterim ve dogrulama `POST /v1/adres/toplu` ile tek istekte yapilir.
+- **Acilir listelerde mahalle disi yollar:** SIPARIS'in "dahil_ilce" karsiligi `GET /v1/adres/alt?ust=ilce:{id}&cocuk=sokak`.
+- **Kurye yonlendirmesi:** Yandex / Google / Waze baglantilarina ek olarak HARITA navigasyonu: `navigasyon_baglantisi(duraklar, adlar)`
+  (cok duraklı, sesli Turkce).
 - **Gecis:** Adim adim, her adim ayri dagitimla; once rota, sonra karo, sonra adres. Eski uclar o zamana kadar calismaya devam eder.
 
 ## MotoConvoy
@@ -114,6 +130,13 @@ Python istemcisi icin `httpx==0.28.1` requirements.txt'e eklenir.
 - **Rota ve varis hedefi:** `POST /v1/rota` (`"profil": "motosiklet"`), hedef arama `GET /v1/adres/ara`. OpenRouteService gunluk 2.000 istek siniri kalkar.
 - **Kalan mesafe:** Telefon rotayi bir kez ister ve kendi hesaplar (plandaki mantik degismez); sunucu yalniz rota cizgisini verir.
 - **Ek imkanlar:** `/valhalla/trace_attributes` (GPS izini yola oturtma), `/valhalla/isochrone` (erisim alani), `/valhalla/optimized_route` (durak sirasi), `/v1/adres/nokta` (hangi yol / mahalle).
+- **Rota secenekleri:** `/valhalla/route` ile `costing_options.motorcycle`: `exclude_tolls` (gisesiz), `exclude_highways` (otoyolsuz),
+  `exclude_unpaved` (topraksiz), `shortest` (en kisa), `use_highways` / `use_tolls` (0-1 tercih). 50 duraga kadar tur.
+- **Grup ETA:** `/valhalla/sources_to_targets` (uyeler -> hedef).
+- **Ani durma ortami:** `GET /v1/yol/nokta?lat&lon&yon` (yol sinifi, trafik isigi / dur levhasi ve kavsaga kalan mesafe, tunel, gise, il / ilce);
+  OSM hiz siniri cogu yolda bostur (`hiz_siniri_kmh` null), `tahmini_hiz_kmh` yol sinifindan gelir.
+- **Rota aktarma:** `GET /v1/baglanti/coz?adres=<Google Maps / Yandex baglantisi>` (kisa baglantilar dahil).
+- **Bilinen sinir:** Yukseklik (rakim) verisi kurulmadi; `/valhalla/height` bos doner (bkz. YAYIN.md).
 
 ## Yeni proje
 
@@ -124,5 +147,5 @@ Python istemcisi icin `httpx==0.28.1` requirements.txt'e eklenir.
 
 ## Sinirlar
 
-Rota en fazla 20 nokta, matris en fazla 50 x 50, Valhalla govdesi en fazla 2 MB, adres aramasi en fazla 50 sonuc.
+Rota en fazla 50 nokta, matris en fazla 50 x 50, Valhalla govdesi en fazla 2 MB, adres aramasi en fazla 50 sonuc, toplu getirme 500 oge.
 Veri OpenStreetMap'e dayanir; kapi numarasi ve ad kapsami bolgeye gore degisir. Atif: (c) OpenStreetMap katkicilari.

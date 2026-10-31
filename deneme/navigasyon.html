@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261031.1432">
+  <link rel="stylesheet" href="navigasyon.css?v=261031.1907">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
@@ -24,6 +24,8 @@
     </div>
     <input class="girdi" id="hedef-ara" type="search" placeholder="Nereye? Adres, yer veya sokak" autocomplete="off" spellcheck="false" aria-label="Hedef ara">
     <ul class="liste" id="sonuclar"></ul>
+    <ol class="durak-listesi" id="durak-listesi" aria-label="Duraklar"></ol>
+    <button class="dugme ikincil kucuk durak-ekle" id="durak-ekle" type="button" hidden>Durak ekle</button>
     <div class="secenekler">
       <label class="secim">Profil
         <select class="girdi kucuk" id="profil">
@@ -83,6 +85,6 @@
   </section>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261031.1432"></script>
+  <script type="module" src="navigasyon.js?v=261031.1907"></script>
 </body>
 </html>

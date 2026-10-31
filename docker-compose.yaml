@@ -33,7 +33,9 @@ services:
       use_tiles_ignore_pbf: "True"
       build_admins: "True"
       build_time_zones: "True"
-      build_elevation: "False"
+      # Yukseklik (rakim, egim) verisi: acmak icin ROTA_YUKSEKLIK=True ve bir kez ROTA_YENIDEN_KUR=True (bkz. docs/YAYIN.md)
+      build_elevation: "${ROTA_YUKSEKLIK:-False}"
+      force_rebuild: "${ROTA_YENIDEN_KUR:-False}"
       serve_tiles: "True"
     volumes:
       - harita_rota2:/custom_files

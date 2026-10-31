@@ -9,7 +9,7 @@ from app.metin import ad_katla
 
 _SECIM = """
 SELECT y.id, y.ad, t.kod AS tur, ST_Y(y.merkez::geometry) AS lat, ST_X(y.merkez::geometry) AS lon, y.nufus,
-       y.ust_id, u.ad AS ust_ad, ut.kod AS ust_tur
+       y.ust_id, u.ad AS ust_ad, ut.kod AS ust_tur, y.kaynak_anahtari
   FROM yerlesim y
   JOIN tnm_yerlesim_turu t ON t.id = y.tur_id
   LEFT JOIN yerlesim u ON u.id = y.ust_id
@@ -23,7 +23,26 @@ def _satir(s: asyncpg.Record) -> dict:
     return {
         "id": s["id"], "ad": s["ad"], "tur": s["tur"], "merkez": {"lat": s["lat"], "lon": s["lon"]}, "nufus": s["nufus"],
         "ust": {"id": s["ust_id"], "ad": s["ust_ad"], "tur": s["ust_tur"]} if s["ust_id"] else None,
+        "kaynak": s["kaynak_anahtari"],
     }
+
+
+async def toplu(idler: list[int]) -> list[dict]:
+    """Verilen yerlesimler tek sorguda (toplu ad / zincir dogrulama icin)."""
+    if not idler:
+        return []
+    async with havuz().acquire() as baglanti:
+        satirlar = await baglanti.fetch(_SECIM + " AND y.id = ANY($1::bigint[])", idler)
+    return [_satir(s) for s in satirlar]
+
+
+async def kaynaktan(anahtarlar: list[str]) -> list[dict]:
+    """OSM kaynak anahtariyla (osm:relation:.. / osm:node:..) yerlesimler."""
+    if not anahtarlar:
+        return []
+    async with havuz().acquire() as baglanti:
+        satirlar = await baglanti.fetch(_SECIM + " AND y.kaynak_anahtari = ANY($1::text[])", anahtarlar)
+    return [_satir(s) for s in satirlar]
 
 
 def _like_kacis(metin: str) -> str:

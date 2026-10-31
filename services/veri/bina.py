@@ -13,7 +13,7 @@ from pathlib import Path
 import osmium
 import psycopg
 
-from adres import MAHALLE_HAZIRLA
+from adres import MAHALLE_HAZIRLA, MAHALLE_TEMIZLE
 
 log = logging.getLogger("bina")
 
@@ -150,6 +150,8 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
         baglanti.execute(f"UPDATE bina_surum SET durum_id = {durum('tamam')}, bitis = now(), adet = %s, kaynak_tarihi = %s::timestamptz WHERE id = %s",
                          (adet, tarih, surum))
         baglanti.execute("TRUNCATE gecici_bina")
+        for sorgu in MAHALLE_TEMIZLE:
+            baglanti.execute(sorgu)
         baglanti.commit()
         baglanti.execute("ANALYZE bina")
         baglanti.commit()
