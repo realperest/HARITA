@@ -897,7 +897,7 @@ async function baslat() {
   const sunucu = await sunucuYapilandirmasi();
   durum.api = kayit.api || VARSAYILAN_API;
   durum.anahtar = hash.anahtar || kayit.anahtar || sunucu.anahtar || '';
-  durum.mtAnahtar = hash.mtAnahtar || kayit.mtAnahtar || sunucu.mtAnahtar || '';
+  durum.mtAnahtar = (hash.mtAnahtar || kayit.mtAnahtar || sunucu.mtAnahtar || '').replace(/['"\s]/g, '');
   durum.katmanKod = kayit.katmanKod || 'v-dark';
   durum.motorAd = kayit.motorAd || 'maplibre';
   durum.yap = varsayilanYapilandirma();
