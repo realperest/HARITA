@@ -796,11 +796,11 @@ function comboKur(kap, adimSayisi, mesajId, secildi, canliSecildi = secildi) {
     } catch (hata) {
       mesaj(mesajId, hata instanceof HataMesaji ? hata.message : 'Liste yüklenemedi.', 'hata');
     }
-    // Liste bosaltildiysa harita bir ust secili listeye gore degisir; hicbiri secili degilse alan temizlenir
-    let k = i;
-    while (k >= 0 && !secili[k]) k--;
-    if (k >= 0) secildi(COMBO_ADIMLARI[k].tur, secili[k]);
-    else haritaAlaniTemizle();
+    // Liste bosaltilirsa harita bir ustteki secili listeye gore doner; hicbiri secili degilse temizlenir
+    let hedef = i;
+    while (hedef >= 0 && !secili[hedef]) hedef--;
+    if (hedef >= 0) secildi(COMBO_ADIMLARI[hedef].tur, secili[hedef]);
+    else { motor?.sinir(null); motor?.vurgu(null); }
   }
 
   async function ilkYukleme() {
@@ -834,12 +834,6 @@ function comboKur(kap, adimSayisi, mesajId, secildi, canliSecildi = secildi) {
     },
     sifirla() { yuklendi = false; },
   };
-}
-
-/** Haritadaki sinir taramasini ve vurguyu kaldirir (pin kalir). */
-function haritaAlaniTemizle() {
-  motor.sinir(null);
-  motor.vurgu(null);
 }
 
 /** Ara sekmesinde bir combo secimi: il / ilce / mahalle sinirina, diger adimlar ilgili noktaya gider. */
