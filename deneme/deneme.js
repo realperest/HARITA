@@ -39,6 +39,8 @@ const YER_RENKLERI = {
   akaryakit: '#8B949E', yeme_icme: '#FF7B72', market: '#3FB950', firin: '#E3B341', otel: '#58A6FF', dukkan: '#8B949E',
 };
 
+const VURGU_RENGI = '#FF6A00';
+
 const durum = {
   api: VARSAYILAN_API,
   anahtar: '',
@@ -49,7 +51,7 @@ const durum = {
   motorAd: 'maplibre',
   sekme: 'baglanti',
   goruntu: { lat: 39.0, lon: 35.0, zoom: 5.5 },
-  veri: { pin: null, duraklar: [], sinir: null, rotalar: [], yakin: [], yerler: null, izokron: null },
+  veri: { pin: null, duraklar: [], sinir: null, vurgu: null, rotalar: [], yakin: [], yerler: null, izokron: null },
 };
 let motor = null;
 
@@ -308,13 +310,21 @@ class MapLibreMotoru {
 
   kaplamaKur() {
     const h = this.h;
-    for (const id of ['sinir', 'rotalar', 'yakin', 'izokron', 'yerler']) {
+    for (const id of ['sinir', 'vurgu', 'rotalar', 'yakin', 'izokron', 'yerler']) {
       if (!h.getSource(id)) h.addSource(id, { type: 'geojson', data: BOS_KOLEKSIYON });
     }
     h.addLayer({ id: 'izokron-dolgu', type: 'fill', source: 'izokron', paint: { 'fill-color': ['get', 'renk'], 'fill-opacity': 0.16 } });
     h.addLayer({ id: 'izokron-cizgi', type: 'line', source: 'izokron', paint: { 'line-color': ['get', 'renk'], 'line-width': 2 } });
     h.addLayer({ id: 'sinir-dolgu', type: 'fill', source: 'sinir', paint: { 'fill-color': '#F5A623', 'fill-opacity': 0.08 } });
     h.addLayer({ id: 'sinir-cizgi', type: 'line', source: 'sinir', paint: { 'line-color': '#F5A623', 'line-width': 2 } });
+    // Secilen sokak / bina / kapi: tarama alanindan ayirt edilsin diye kalin, beyaz kenarli ve opak turuncu
+    h.addLayer({ id: 'vurgu-dolgu', type: 'fill', source: 'vurgu', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': VURGU_RENGI, 'fill-opacity': 0.5 } });
+    h.addLayer({ id: 'vurgu-kenar', type: 'line', source: 'vurgu', filter: ['!=', ['geometry-type'], 'Point'],
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 7, 19, 15] } });
+    h.addLayer({ id: 'vurgu-cizgi', type: 'line', source: 'vurgu', filter: ['!=', ['geometry-type'], 'Point'],
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': VURGU_RENGI, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3.5, 19, 9] } });
+    h.addLayer({ id: 'vurgu-nokta', type: 'circle', source: 'vurgu', filter: ['==', ['geometry-type'], 'Point'],
+      paint: { 'circle-radius': 9, 'circle-color': VURGU_RENGI, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 } });
     // Rota bacaklari: ic ice kalinlik (ust uste binince hepsi gorunur), beyaz kenar ve yon oklari
     h.addLayer({
       id: 'rota-kenar', type: 'line', source: 'rotalar',
@@ -349,6 +359,7 @@ class MapLibreMotoru {
       paint: { 'text-color': '#D29922', 'text-halo-color': '#0E1116', 'text-halo-width': 1.2 },
     });
     this.sinir(this.veri.sinir);
+    this.vurgu(this.veri.vurgu);
     this.rotalar(this.veri.rotalar);
     this.yakin(this.veri.yakin);
     this.yerler(this.veri.yerler);
@@ -380,6 +391,7 @@ class MapLibreMotoru {
   }
 
   sinir(geometri) { this.veri.sinir = geometri; this.veriYaz('sinir', ozellik(geometri)); }
+  vurgu(geometri) { this.veri.vurgu = geometri; this.veriYaz('vurgu', ozellik(geometri)); }
   rotalar(liste) {
     this.veri.rotalar = liste;
     this.veriYaz('rotalar', {
@@ -412,7 +424,7 @@ class MapLibreMotoru {
     });
   }
 
-  sigdir(kutu) { this.h.fitBounds([[kutu[0], kutu[1]], [kutu[2], kutu[3]]], { padding: 40, maxZoom: 15 }); }
+  sigdir(kutu, enBuyuk = 15) { this.h.fitBounds([[kutu[0], kutu[1]], [kutu[2], kutu[3]]], { padding: 40, maxZoom: enBuyuk }); }
   uc(lat, lon, zoom) { this.h.flyTo({ center: [lon, lat], zoom }); }
   kutu() { const b = this.h.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]; }
 
@@ -433,6 +445,7 @@ class LeafletMotoru {
     // MapLibre zoom'u 512 px karoya gore; Leaflet 256 px karoya gore bir fazladir
     this.h = L.map(kap, { center: [goruntu.lat, goruntu.lon], zoom: goruntu.zoom + 1, zoomSnap: 0.25, worldCopyJump: false });
     this.sinirKatman = L.layerGroup().addTo(this.h);
+    this.vurguKatman = L.layerGroup().addTo(this.h);
     this.izokronKatman = L.layerGroup().addTo(this.h);
     this.rotaKatman = L.layerGroup().addTo(this.h);
     this.yerKatman = L.layerGroup().addTo(this.h);
@@ -446,6 +459,7 @@ class LeafletMotoru {
     this.pin(veri.pin);
     this.duraklar(veri.duraklar);
     this.sinir(veri.sinir);
+    this.vurgu(veri.vurgu);
     this.rotalar(veri.rotalar);
     this.yakin(veri.yakin);
     this.yerler(veri.yerler);
@@ -522,6 +536,20 @@ class LeafletMotoru {
     }
   }
 
+  vurgu(geometri) {
+    this.veri.vurgu = geometri;
+    this.vurguKatman.clearLayers();
+    if (!geometri) return;
+    const L = window.L;
+    const ozellikler = { type: 'Feature', geometry: geometri, properties: {} };
+    if (geometri.type === 'Point') {
+      L.geoJSON(ozellikler, { pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 9, color: '#FFFFFF', weight: 3, fillColor: VURGU_RENGI, fillOpacity: 1 }), interactive: false }).addTo(this.vurguKatman);
+      return;
+    }
+    L.geoJSON(ozellikler, { style: { color: '#FFFFFF', weight: 9, opacity: 0.9, fillOpacity: 0 }, interactive: false }).addTo(this.vurguKatman);
+    L.geoJSON(ozellikler, { style: { color: VURGU_RENGI, weight: 5, fillColor: VURGU_RENGI, fillOpacity: 0.5 }, interactive: false }).addTo(this.vurguKatman);
+  }
+
   rotalar(liste) {
     this.veri.rotalar = liste;
     this.rotaKatman.clearLayers();
@@ -554,7 +582,7 @@ class LeafletMotoru {
     }).bindTooltip(y.ad).addTo(this.yakinKatman));
   }
 
-  sigdir(kutu) { this.h.fitBounds([[kutu[1], kutu[0]], [kutu[3], kutu[2]]], { padding: [40, 40], maxZoom: 16 }); }
+  sigdir(kutu, enBuyuk = 15) { this.h.fitBounds([[kutu[1], kutu[0]], [kutu[3], kutu[2]]], { padding: [40, 40], maxZoom: enBuyuk + 1 }); }
   uc(lat, lon, zoom) { this.h.flyTo([lat, lon], zoom + 1); }
   kutu() { const b = this.h.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]; }
 
@@ -809,6 +837,7 @@ async function comboAraSec(tur, oge) {
   if (!['il', 'ilce', 'mahalle_koy'].includes(tur)) { adresSec(oge); return; }
   try {
     const y = await api(`/v1/yerlesim/${oge.id}?sinir=true`);
+    motor.vurgu(null);
     motor.sinir(y.sinir || null);
     if (y.sinir) motor.sigdir(geometriKutusu(y.sinir));
     else motor.uc(y.merkez.lat, y.merkez.lon, 14);
@@ -849,12 +878,14 @@ async function ara() {
 
 async function adresSec(r) {
   motor.pin({ lat: r.merkez.lat, lng: r.merkez.lon });
-  motor.uc(r.merkez.lat, r.merkez.lon, r.tur === 'kapi' ? 18 : r.tur === 'sokak' ? 16 : 15);
   const ham = $('ara-ham');
   ham.hidden = false;
   ham.textContent = `${sayi(r.merkez.lat, 6)} ; ${sayi(r.merkez.lon, 6)}\n${JSON.stringify(r, null, 2)}`;
   motor.sinir(null);
+  motor.vurgu(null);
   $('ara-alan-dugme')?.remove();
+  if (['sokak', 'bina', 'kapi', 'yer'].includes(r.tur)) { await ogeVurgula(r, ham); return; }
+  motor.uc(r.merkez.lat, r.merkez.lon, 15);
   let cizgi = null;
   if (r.tur === 'sokak') {
     try {
@@ -872,6 +903,33 @@ async function adresSec(r) {
   } catch (hata) {
     console.warn('Alan boyanamadı', hata);
     if (cizgi) motor.sinir(cizgi);
+  }
+}
+
+/**
+ * Secilen sokak / bina / kapi / yer: yalniz kendisi kalin turuncuyla vurgulanir ve ona yakinlasilir; mahalle / ilce taramasi
+ * varsayilan cizilmez (karismasin), isteyen alan dugmeleriyle ekler.
+ */
+async function ogeVurgula(r, ham) {
+  const nokta = { type: 'Point', coordinates: [r.merkez.lon, r.merkez.lat] };
+  let geometri = nokta;
+  try {
+    if (r.tur === 'sokak') geometri = (await api(`/v1/adres/sokak/${r.id}?cizgi=true`)).cizgi || nokta;
+    else if (r.tur === 'bina') geometri = (await api(`/v1/adres/bina/${r.id}?sinir=true`)).sinir || nokta;
+  } catch (hata) {
+    console.warn('Geometri alınamadı', hata);
+  }
+  motor.vurgu(geometri);
+  if (geometri.type === 'Point') motor.uc(r.merkez.lat, r.merkez.lon, 18);
+  else motor.sigdir(geometriKutusu(geometri), 18);
+  try {
+    const idari = (await api(`/v1/adres/nokta?lat=${r.merkez.lat}&lon=${r.merkez.lon}&yaricap_m=50&limit=1`)).idari;
+    const kap = boyaDugmeleri(idari, null);
+    kap.querySelectorAll('button').forEach((b) => b.classList.remove('aktif'));
+    kap.id = 'ara-alan-dugme';
+    ham.before(kap);
+  } catch (hata) {
+    console.warn('Alan düğmeleri kurulamadı', hata);
   }
 }
 
@@ -925,6 +983,7 @@ function satirMetin(metin, sinif = '') {
 
 async function pinKoy(ll, boya = true) {
   motor.pin(ll);
+  motor.vurgu(null);
   const sonuc = $('pin-sonuc');
   sonuc.replaceChildren();
   mesaj('pin-mesaj', 'Sorgulanıyor...');
@@ -989,6 +1048,7 @@ async function yerSec(id) {
   detay.replaceChildren();
   try {
     const y = await api(`/v1/yerlesim/${id}?sinir=true`);
+    motor.vurgu(null);
     motor.sinir(y.sinir || null);
     if (y.sinir) motor.sigdir(geometriKutusu(y.sinir));
     else motor.uc(y.merkez.lat, y.merkez.lon, 14);
