@@ -1,4 +1,5 @@
 [
+  {"surum": "261102.2157", "not": "Hava tahmini onbellegi 30 dk yerine 5 dk; hava karti 5 dakikada bir yenilenir"},
   {"surum": "261102.2152", "not": "Hava karti: radar noktasinda yagis var/yok satiri (tahmin 0 olsa da radar yagis gosterirse one cikar); radar zaman bandinda saat yazilari"},
   {"surum": "261102.2142", "not": "Hava durumu dugmesi: RainViewer yagmur radari animasyonu + konumun hava karti (harita-hava.js, MotoConvoy ile ayni); 3D ve hava varsayilan kapali"},
   {"surum": "261102.2137", "not": "3D bina dugmesi deneme ve navigasyon haritasina eklendi (harita-3d.js); vektor haritada binalar yukseltilmis blok olarak cizilir"},

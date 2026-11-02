@@ -1,6 +1,6 @@
 """Rota boyunca hava durumu: Open-Meteo saatlik tahmini, her ornek noktaya tahmini varis saatinde.
 
-Tahminler ~11 km'lik izgara hucresine (0,1 derece) gore Redis'te 30 dakika tutulur (anahtar hava:<enlem>,<boylam>:saatlik).
+Tahminler ~11 km'lik izgara hucresine (0,1 derece) gore Redis'te 5 dakika tutulur (anahtar hava:<enlem>,<boylam>:saatlik).
 Open-Meteo ucretsiz sunucusu ticari olmayan kullanim icindir; ticari kullanimda HAVA_ANAHTARI ile ucretli adres kullanilir.
 """
 
@@ -17,7 +17,7 @@ from app.services.http import AltServisHatasi, istemci
 
 log = logging.getLogger(__name__)
 
-ONBELLEK_SN = 1800
+ONBELLEK_SN = 300
 MAKS_ORNEK = 25
 ALANLAR = "temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m,visibility"
 
