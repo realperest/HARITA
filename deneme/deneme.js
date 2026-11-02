@@ -5,6 +5,7 @@
  */
 import * as maplibregl from 'https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/+esm';
 import { layers, namedFlavor } from 'https://cdn.jsdelivr.net/npm/@protomaps/basemaps@5.7.2/+esm';
+import { UcBoyutKontrolu } from './harita-3d.js';
 
 const VARSAYILAN_API = 'https://harita-api.89.45.45.152.sslip.io';
 const VARSAYILAN_KARO = 'https://harita-karo.89.45.45.152.sslip.io';
@@ -297,6 +298,9 @@ class MapLibreMotoru {
       zoom: goruntu.zoom,
     });
     this.h.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-left');
+    // 3D bina dugmesi: tema secili katmana uyar (uydu / karma katmanda koyu tema)
+    const motor = this;
+    this.h.addControl(new UcBoyutKontrolu({ get tema() { return motor.katman.tur === 'vektor' ? motor.katman.tema : 'dark'; } }), 'top-left');
     this.h.addControl(new maplibregl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 17 },
     }), 'top-left');

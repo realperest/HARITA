@@ -5,6 +5,7 @@
  */
 import * as maplibregl from 'https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/+esm';
 import { layers, namedFlavor } from 'https://cdn.jsdelivr.net/npm/@protomaps/basemaps@5.7.2/+esm';
+import { UcBoyutKontrolu } from './harita-3d.js';
 
 const VARSAYILAN_API = 'https://harita-api.89.45.45.152.sslip.io';
 const VARSAYILAN_KARO = 'https://harita-karo.89.45.45.152.sslip.io';
@@ -1497,6 +1498,8 @@ async function baslat() {
     attributionControl: { compact: true },
   });
   harita.on('style.load', kaplamaKur);
+  // 3D bina dugmesi: tema secili katmana uyar (uydu / karma katmanda koyu tema)
+  harita.addControl(new UcBoyutKontrolu({ get tema() { const k = aktifKatman(); return k.tur === 'vektor' ? k.tema : 'dark'; } }), 'top-left');
   konumIsaretiKur();
   olaylariBagla();
   arayuzGuncelle();
