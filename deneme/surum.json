@@ -1,4 +1,5 @@
 [
+  {"surum": "261102.2214", "not": "Hava dugmesi acilinca konum alinir ve olcum (hava karti + radar noktasi) konuma gore yapilir; konum yoksa harita ortasi; kart basligi hangisi oldugunu yazar"},
   {"surum": "261102.2212", "not": "Acilista konuma ucarak gidilir ve konum pinlenir; hava paneli kapaliyken bos kutu gorunmez"},
   {"surum": "261102.2208", "not": "Acilista konuma yaklasma duzeltildi: baglan() haritayi yeniden kurarken ucus hedefi korunur"},
   {"surum": "261102.2201", "not": "Sayfa acilisinda harita (izin verilirse) konumuna yaklasir; hava dugmesi artik konuma gitmez, kart haritanin ortasini gosterir"},

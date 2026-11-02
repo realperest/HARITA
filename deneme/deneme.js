@@ -307,6 +307,7 @@ class MapLibreMotoru {
     this.h.addControl(new UcBoyutKontrolu({ get tema() { return motor.katman.tur === 'vektor' ? motor.katman.tema : 'dark'; } }), 'top-left');
     // Hava durumu dugmesi: radar + hava karti birlikte acilip kapanir (varsayilan kapali)
     this.h.addControl(new HavaKontrolu({
+      konumAl: canliKonum,
       havaGetir: (lat, lon) => api('/v1/yol/hava', { method: 'POST', body: JSON.stringify({ noktalar: [[lat, lon], [lat + 0.0001, lon]] }) }),
     }), 'top-left');
     this.h.addControl(new maplibregl.GeolocateControl({

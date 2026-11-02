@@ -27,6 +27,7 @@ export const AYAR = {
   HAVA_YENILE_MS: 2 * 60 * 1000,
   HAVA_HATA_MS: 2 * 60 * 1000,
   HAVA_TASIMA_M: 8000,
+  KONUM_ZAMAN_ASIMI_MS: 8000,
 };
 
 const UYARI_METNI = {
@@ -83,6 +84,7 @@ export class HavaKontrolu {
     this.havaSon = null;
     this.havaIstek = 0;
     this.ozet = null;
+    this.konum = null;
     this.radarYagis = null;
     this.radarIstek = 0;
     this.radarResimleri = new Map();
@@ -109,7 +111,8 @@ export class HavaKontrolu {
 
     /* setStyle katmanlari siler: radar istenmisse yeni stilde yeniden kurulur. */
     this.stilOlayi = () => { if (this.acik) this.radarYenile().catch((e) => console.warn('Radar yeniden kurulamadi', e)); };
-    this.hareketOlayi = () => { if (this.acik) { this.havaGuncelle(); this.radarNoktasi(); } };
+    /* Konum biliniyorsa olcum onun uzerinden yapilir (harita kaydirilsa da degismez); bilinmiyorsa haritanin ortasi izlenir. */
+    this.hareketOlayi = () => { if (this.acik && !this.konum) { this.havaGuncelle(); this.radarNoktasi(); } };
     harita.on('style.load', this.stilOlayi);
     harita.on('moveend', this.hareketOlayi);
     return this.kap;
@@ -139,7 +142,7 @@ export class HavaKontrolu {
     this.yaz(true);
     this.panel.hidden = false;
     this.havaSon = null;
-    this.havaGuncelle();
+    this.konumuAl();
     try {
       await this.radarAc();
     } catch (hata) {
@@ -149,7 +152,46 @@ export class HavaKontrolu {
     }
   }
 
+  /* Olcum noktasi: kullanicinin konumu, yoksa haritanin ortasi. */
+  referans() {
+    if (this.konum) return this.konum;
+    const c = this.harita.getCenter();
+    return { lat: c.lat, lon: c.lng };
+  }
+
+  /* Kullanicinin konumunu alir (secenek.konumAl ya da tarayici); alinirsa olcum konuma gecer. Alinamazsa harita ortasi kullanilir. */
+  async konumuAl() {
+    this.etiketYaz();
+    this.havaGuncelle();
+    let k = null;
+    try {
+      k = this.secenek.konumAl ? await this.secenek.konumAl() : await this.tarayiciKonumu();
+    } catch (hata) {
+      console.warn('Konum alınamadı, harita ortası kullanılacak', hata);
+    }
+    if (!this.acik) return;
+    this.konum = k ? { lat: k.lat, lon: k.lon } : null;
+    this.etiketYaz();
+    this.havaSon = null;
+    this.havaGuncelle();
+    this.radarNoktasi();
+  }
+
+  tarayiciKonumu() {
+    return new Promise((coz) => {
+      if (!navigator.geolocation) { coz(null); return; }
+      navigator.geolocation.getCurrentPosition((p) => coz({ lat: p.coords.latitude, lon: p.coords.longitude }), () => coz(null),
+        { enableHighAccuracy: false, timeout: AYAR.KONUM_ZAMAN_ASIMI_MS, maximumAge: 60000 });
+    });
+  }
+
+  /* Kartin basligi olcumun nerede yapildigini soyler. */
+  etiketYaz() {
+    this.panel.querySelector('.hava-etiket').textContent = this.konum ? 'HAVA · KONUMUN' : 'HAVA · HARİTA ORTASI';
+  }
+
   kapat() {
+    this.konum = null;
     this.yaz(false);
     this.radarDurdur();
     this.katmanlariSil();
@@ -313,10 +355,10 @@ export class HavaKontrolu {
   async radarNoktasi() {
     if (!this.acik || !this.kareler.length) return;
     const istek = ++this.radarIstek;
-    const c = this.harita.getCenter();
+    const c = this.referans();
     const z = AYAR.MAKS_YAKIN;
     const n = 2 ** z;
-    const xf = ((c.lng + 180) / 360) * n;
+    const xf = ((c.lon + 180) / 360) * n;
     const enlem = (c.lat * Math.PI) / 180;
     const yf = ((1 - Math.asinh(Math.tan(enlem)) / Math.PI) / 2) * n;
     const adres = this.kareler[this.kareler.length - 1].adres.replace('{z}', z).replace('{x}', Math.floor(xf)).replace('{y}', Math.floor(yf));
@@ -359,8 +401,7 @@ export class HavaKontrolu {
   /* Haritanin ortasindaki konumun havasi; sure dolmadikca ve konum 8 km'den az degistiyse yeniden sormaz. */
   async havaGuncelle() {
     if (!this.acik || !this.secenek.havaGetir) return;
-    const c = this.harita.getCenter();
-    const konum = { lat: c.lat, lon: c.lng };
+    const konum = this.referans();
     const simdi = Date.now();
     const o = this.havaSon;
     if (o && simdi - o.t < o.bekle && mesafeM(o, konum) < AYAR.HAVA_TASIMA_M) return;
