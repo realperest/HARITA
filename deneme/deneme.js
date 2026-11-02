@@ -6,6 +6,7 @@
 import * as maplibregl from 'https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/+esm';
 import { layers, namedFlavor } from 'https://cdn.jsdelivr.net/npm/@protomaps/basemaps@5.7.2/+esm';
 import { UcBoyutKontrolu } from './harita-3d.js';
+import { HavaKontrolu } from './harita-hava.js';
 
 const VARSAYILAN_API = 'https://harita-api.89.45.45.152.sslip.io';
 const VARSAYILAN_KARO = 'https://harita-karo.89.45.45.152.sslip.io';
@@ -301,6 +302,10 @@ class MapLibreMotoru {
     // 3D bina dugmesi: tema secili katmana uyar (uydu / karma katmanda koyu tema)
     const motor = this;
     this.h.addControl(new UcBoyutKontrolu({ get tema() { return motor.katman.tur === 'vektor' ? motor.katman.tema : 'dark'; } }), 'top-left');
+    // Hava durumu dugmesi: radar + hava karti birlikte acilip kapanir (varsayilan kapali)
+    this.h.addControl(new HavaKontrolu({
+      havaGetir: (lat, lon) => api('/v1/yol/hava', { method: 'POST', body: JSON.stringify({ noktalar: [[lat, lon], [lat + 0.0001, lon]] }) }),
+    }), 'top-left');
     this.h.addControl(new maplibregl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 17 },
     }), 'top-left');

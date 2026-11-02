@@ -1,4 +1,5 @@
 [
+  {"surum": "261102.2142", "not": "Hava durumu dugmesi: RainViewer yagmur radari animasyonu + konumun hava karti (harita-hava.js, MotoConvoy ile ayni); 3D ve hava varsayilan kapali"},
   {"surum": "261102.2137", "not": "3D bina dugmesi deneme ve navigasyon haritasina eklendi (harita-3d.js); vektor haritada binalar yukseltilmis blok olarak cizilir"},
   {"surum": "261031.2254", "not": "Bir combo bosaltilinca cizim ve tarama bir ustteki secili combonun alanina doner"},
   {"surum": "261031.2248", "not": "Secilen sokak / bina dis cizgisi kalin, ici neredeyse seffaf; genel hafif mahalle / ilce taramasi geri geldi"},

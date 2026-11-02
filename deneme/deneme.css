@@ -267,3 +267,20 @@ body {
 /* Veritabani aracina baglanti */
 .arac-baglanti { color: var(--ikincil); text-decoration: none; }
 .arac-baglanti:hover { text-decoration: underline; }
+
+/* Hava durumu katmani (harita-hava.js): sag ustte hava karti ve radar zaman cizelgesi */
+.hava-panel { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; flex-direction: column; gap: 8px; width: 240px; pointer-events: none; }
+.hava-kart { background: var(--yuzey); border: 1px solid var(--sinir); border-radius: var(--radius-kart); padding: 8px 12px; color: var(--metin); }
+.hava-kart.uyari-var { border-color: var(--uyari); }
+.hava-satir { display: flex; align-items: baseline; gap: 8px; }
+.hava-etiket { color: var(--metin-ikincil); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.5px; }
+.hava-satir b { font-size: 1rem; font-family: var(--font-sayi); }
+.hava-detay { color: var(--metin-ikincil); font-size: 0.85rem; margin-top: 2px; }
+.hava-uyari { color: var(--uyari); font-size: 0.9rem; font-weight: 700; margin-top: 2px; }
+.hava-zaman { background: var(--yuzey); border: 1px solid var(--sinir); border-radius: var(--radius-kart); padding: 10px 12px; }
+.hava-iz { position: relative; height: 6px; background: var(--sinir); border-radius: 3px; }
+.hava-nokta { position: absolute; top: -2px; width: 2px; height: 10px; margin-left: -1px; background: var(--metin-ikincil); }
+.hava-nokta.simdi { background: var(--uyari); }
+.hava-imlec { position: absolute; top: -4px; left: 0; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--ikincil); transition: left 0.7s linear; }
+.hava-imlec.aniden { transition: none; }
+.hava-panel [hidden] { display: none; }
