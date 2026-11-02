@@ -13,7 +13,7 @@ Kapsam: tum Turkiye. Veri: OpenStreetMap (c) OpenStreetMap katkicilari (ODbL).
 | `rota` | Valhalla | Rota, sure/mesafe matrisi (auto, motosiklet, bisiklet, yaya) | Hayir (ic ag) |
 | `gateway` | FastAPI | Proje anahtari, izin, kaynak kisiti, kota, kullanim sayaci, OSRM uyumlu rota | Evet (alan adi) |
 | `plan` | VROOM | Cok araçli / cok kuryeli atama ve siralama (matris gateway'den hazir gelir) | Hayir (ic ag) |
-| `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlarini, sokaklari, kapi numaralarini, yerleri, adlandirilmis binalari, hiz kamerasi ve kasisleri OSM'den yukler, aylik tazeler. Adres aramasi bu veriden yapilir (dis servis yok) | Hayir |
+| `veri` | Python + osmium | Turkiye il / ilce / mahalle-koy sinirlarini, sokaklari, kapi numaralarini, yerleri, adlandirilmis binalari, hiz kamerasi ve kasisleri OSM'den yukler, her ayin 1'i 05:00'te (Turkiye saati) tazeler. Adres aramasi bu veriden yapilir (dis servis yok) | Hayir |
 | `harita-db`, `harita-redis` | PostGIS 17, Redis 7 (Coolify'in ayri kaynaklari, compose disinda) | Proje / anahtar kayitlari, adres ve yerlesim verisi, kota sayaclari | Hayir |
 | `harita-deneme` | nginx (ayri Coolify uygulamasi, `deneme/`) | Deneme haritasi, veritabani araci, navigasyon denemesi | Evet |
 
@@ -90,4 +90,5 @@ pytest   # PostgreSQL (55432) ve Redis (56379) gerekir, bkz. tests/conftest.py
 ## Istemci
 
 - `istemci/harita-istemci.js` (tarayici): MapLibre haritasi kurar; rota, matris, arama, adres, yerlesim, Valhalla. Derleyici gerektirmez.
+- `istemci/harita-3d.js` (tarayici): 3D bina katmani ve kucuk "3D bina" dugmesi (`UcBoyutKontrolu`, ya da kendi dugmeniz icin `ucBoyutDegistir`). Kapaliyken hicbir kaynak tuketmez; yalniz vektor haritada calisir.
 - `istemci/harita_istemci.py` (arka uc, httpx): ayni uclarin asenkron Python sarmalayicisi.

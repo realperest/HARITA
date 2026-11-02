@@ -13,6 +13,8 @@ from pathlib import Path
 import osmium
 import psycopg
 
+from dogrulama import aktif_say, oran_dogrula
+
 log = logging.getLogger("adres")
 
 # OSM etiketi -> tnm_yer_turu.kod (SIPARIS ile ayni eslesme)
@@ -203,8 +205,8 @@ def tablo_bekle(baglanti: psycopg.Connection) -> None:
     raise RuntimeError("adres tablolari olusmadi")
 
 
-def gerekli_mi(baglanti: psycopg.Connection, guncelleme_gun: int, zorla: bool) -> bool:
-    """Son basarili adres yuklemesi yoksa, guncelleme_gun'den eskiyse veya eski bicimli veri varsa True."""
+def gerekli_mi(baglanti: psycopg.Connection, esik_sn: float, zorla: bool) -> bool:
+    """Son basarili adres yuklemesi yoksa, esik_sn'den eskiyse veya eski bicimli veri varsa True."""
     if zorla:
         return True
     # Eski yukleme mahallesiz sokaklari ulke capinda tek kayitta birlestiriyordu ('sokak:0:<ad>'); varsa bir kez yeniden yuklenir
@@ -216,8 +218,8 @@ def gerekli_mi(baglanti: psycopg.Connection, guncelleme_gun: int, zorla: bool) -
         log.info("Eski bicimli mahallesiz sokak kayitlari var; adres verisi yeniden yuklenecek.")
         return True
     son = baglanti.execute(
-        """SELECT bitis < now() - make_interval(days => %s) FROM adres_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
-            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (guncelleme_gun,)).fetchone()
+        """SELECT bitis < now() - make_interval(secs => %s) FROM adres_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
+            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (esik_sn,)).fetchone()
     return son is None or bool(son[0])
 
 
@@ -228,6 +230,7 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
                      f"WHERE durum_id = {durum('calisiyor')}")
     surum = baglanti.execute(f"INSERT INTO adres_surum (durum_id) VALUES ({durum('calisiyor')}) RETURNING id").fetchone()[0]
     baglanti.commit()
+    onceki = {t: aktif_say(baglanti, t) for t in ("sokak", "yer_isareti", "kapi_numarasi")}
     try:
         ham = indir()
         # Turkiye olceginde osmium tags-filter bellek sinirini asiyor (SIGKILL); dosya dogrudan, diskte konum indeksiyle okunur
@@ -287,6 +290,8 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
             baglanti.execute(sorgu, {"s": surum})
             baglanti.commit()
             log.info("Baglama %s/%s tamam (%.0f sn)", sira, len(baglama), time.time() - baslangic)
+        for tablo in ("sokak", "yer_isareti", "kapi_numarasi"):
+            oran_dogrula(baglanti, tablo, surum, onceki[tablo])
         for tablo in ("sokak", "yer_isareti", "kapi_numarasi"):
             baglanti.execute(f"UPDATE {tablo} SET aktif_mi = FALSE WHERE aktif_mi AND surum_id IS DISTINCT FROM %s", (surum,))
         sayilar = [baglanti.execute(f"SELECT count(*) FROM {t} WHERE aktif_mi").fetchone()[0] for t in ("sokak", "yer_isareti", "kapi_numarasi")]

@@ -23,8 +23,11 @@ COPY nginx.conf.template /etc/nginx/harita.conf.template
 # Cevrimdisi kullanim icin yazi tipleri + simgeler tek arsivde (/paket/varlik.tar.gz)
 RUN tar -czf /usr/share/harita/varlik.tar.gz -C /usr/share/harita assets
 COPY paketler.csv /etc/harita/paketler.csv
+COPY ortak.sh /ortak.sh
 COPY entrypoint.sh /entrypoint.sh
+COPY yenile.sh /yenile.sh
+COPY acilis-kontrol.sh /acilis-kontrol.sh
 COPY paketle.sh /paketle.sh
-RUN chmod +x /entrypoint.sh /paketle.sh /usr/local/bin/pmtiles
+RUN chmod +x /entrypoint.sh /paketle.sh /yenile.sh /acilis-kontrol.sh /usr/local/bin/pmtiles
 EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]

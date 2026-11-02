@@ -14,6 +14,7 @@ import osmium
 import psycopg
 
 from adres import MAHALLE_HAZIRLA, MAHALLE_TEMIZLE
+from dogrulama import aktif_say, oran_dogrula
 
 log = logging.getLogger("bina")
 
@@ -105,13 +106,13 @@ def tablo_bekle(baglanti: psycopg.Connection) -> None:
     raise RuntimeError("bina tablosu olusmadi")
 
 
-def gerekli_mi(baglanti: psycopg.Connection, guncelleme_gun: int, zorla: bool) -> bool:
-    """Son basarili bina yuklemesi yoksa veya guncelleme_gun'den eskiyse True."""
+def gerekli_mi(baglanti: psycopg.Connection, esik_sn: float, zorla: bool) -> bool:
+    """Son basarili bina yuklemesi yoksa veya esik_sn'den eskiyse True."""
     if zorla:
         return True
     son = baglanti.execute(
-        """SELECT bitis < now() - make_interval(days => %s) FROM bina_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
-            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (guncelleme_gun,)).fetchone()
+        """SELECT bitis < now() - make_interval(secs => %s) FROM bina_surum s JOIN tnm_islem_durumu d ON d.id = s.durum_id
+            WHERE d.kod = 'tamam' ORDER BY s.bitis DESC LIMIT 1""", (esik_sn,)).fetchone()
     return son is None or bool(son[0])
 
 
@@ -122,6 +123,7 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
                      f"WHERE durum_id = {durum('calisiyor')}")
     surum = baglanti.execute(f"INSERT INTO bina_surum (durum_id) VALUES ({durum('calisiyor')}) RETURNING id").fetchone()[0]
     baglanti.commit()
+    onceki = aktif_say(baglanti, "bina")
     try:
         ham = indir()
         ayiklanmis = ham  # on suzme bellek sinirini asiyordu; dosya dogrudan okunur
@@ -145,6 +147,7 @@ def calistir(baglanti: psycopg.Connection, indir, kaynak_tarihi, ad_katla, veri_
         for sorgu in ISLEM_SQL:
             baglanti.execute(sorgu, {"surum": surum})
             baglanti.commit()
+        oran_dogrula(baglanti, "bina", surum, onceki)
         baglanti.execute("UPDATE bina SET aktif_mi = FALSE WHERE aktif_mi AND surum_id IS DISTINCT FROM %s", (surum,))
         adet = baglanti.execute("SELECT count(*) FROM bina WHERE aktif_mi").fetchone()[0]
         baglanti.execute(f"UPDATE bina_surum SET durum_id = {durum('tamam')}, bitis = now(), adet = %s, kaynak_tarihi = %s::timestamptz WHERE id = %s",

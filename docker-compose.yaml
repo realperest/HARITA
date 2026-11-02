@@ -21,30 +21,13 @@ services:
       - "8080"
 
   # Rota, matris, izokron (Valhalla). Ilk acilista Geofabrik Turkiye verisinden cizge uretir (saatler surmez, ~20-60 dk).
+  # Her ayin 1'inde 05:00'ten (Turkiye saati) yeni cizge yan klasorde kurulur, dogrulanir ve degistirilir; eskisi .yedek kalir.
   rota:
     # Ortak sunucuyu korumak icin sinirli; asarsa yalniz bu konteyner durur (diger projeler etkilenmez)
     mem_limit: 6g
     cpus: 2.0
-    image: ghcr.io/valhalla/valhalla-scripted:3.9.1
+    build: ./services/rota
     restart: unless-stopped
-    # Valhalla varsayilan sinirlari Turkiye icin dar: motosiklet rotasi 500 km, matris (grup varis suresi, optimize sira)
-    # arac 400 km / motosiklet 200 km. Mevcut valhalla.json her acilista korunur; sinirlar baslamadan once yukseltilir.
-    # Ilk kurulumda dosya henuz yoktur: kurulum bitince servis bir kez yeniden baslatilinca sinirlar uygulanir.
-    entrypoint:
-      - /bin/bash
-      - -c
-      - |
-        f=/custom_files/valhalla.json
-        if [ -f "$$f" ]; then
-          jq '.service_limits.auto.max_matrix_distance = 2500000
-            | .service_limits.motorcycle.max_distance = 2500000 | .service_limits.motorcycle.max_matrix_distance = 2500000
-            | .service_limits.bicycle.max_distance = 1000000 | .service_limits.bicycle.max_matrix_distance = 500000
-            | .service_limits.auto.max_locations = 50 | .service_limits.motorcycle.max_locations = 50
-            | .service_limits.bicycle.max_locations = 50 | .service_limits.pedestrian.max_locations = 50' "$$f" | sponge "$$f"
-          echo "HARITA: servis sinirlari yukseltildi"
-        fi
-        exec /valhalla/scripts/docker-entrypoint.sh "$$@"
-      - rota
     command: ["build_tiles"]
     environment:
       tile_urls: ${OSM_VERI_ADRESI:-https://download.geofabrik.de/europe/turkey-latest.osm.pbf}
@@ -74,7 +57,7 @@ services:
       - "3000"
 
   # Yerlesim yukleyicisi: Turkiye il / ilce / mahalle-koy sinirlari ve sehir-kasaba-koy-mezra-semt merkezlerini OSM'den yukler,
-  # aylik tazeler. Semayi gateway kurar; yukleyici hazir olana kadar bekler.
+  # her ayin 1 inde 05:00 (Turkiye saati) tazeler. Semayi gateway kurar; yukleyici hazir olana kadar bekler.
   veri:
     mem_limit: 2g
     cpus: 1.0
@@ -83,7 +66,6 @@ services:
     environment:
       DATABASE_URL: postgresql://harita:${DB_SIFRE:?DB_SIFRE gerekli}@${DB_ADRESI:-mjvz7cconglhimakyiainj6q}:5432/harita
       VERI_ADRESI: ${OSM_VERI_ADRESI:-https://download.geofabrik.de/europe/turkey-latest.osm.pbf}
-      GUNCELLEME_GUN: ${GUNCELLEME_GUN:-30}
     volumes:
       - harita_veri:/veri
 

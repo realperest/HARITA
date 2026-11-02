@@ -41,7 +41,7 @@ adres = await harita.adres_nokta(40.99, 29.02)    # pin -> adres
 talimat = await harita.adim_adim_rota([(40.99, 29.02), (40.98, 29.03)])   # Turkce navigasyon talimatlari
 ```
 
-- **Tarayici (JS, derleyicisiz):** `istemci/harita-istemci.js`
+- **Tarayici (JS, derleyicisiz):** `istemci/harita-istemci.js` (3D bina icin ayrica `istemci/harita-3d.js`: `harita.addControl(new UcBoyutKontrolu({ tema: 'dark' }))`)
 
 ```js
 import { HaritaIstemcisi } from './harita-istemci.js';
