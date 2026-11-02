@@ -12,6 +12,7 @@ const VARSAYILAN_API = 'https://harita-api.89.45.45.152.sslip.io';
 const VARSAYILAN_KARO = 'https://harita-karo.89.45.45.152.sslip.io';
 const DEPO_ANAHTARI = 'harita_deneme_v1';
 const ACILIS_YAKINLIK = 14;
+let acilisKonumu = null;
 const MT_ATIF = '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener">&copy; MapTiler</a> '
   + '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap katkıcıları</a>';
 
@@ -612,7 +613,8 @@ function harf(i) {
 
 function motorKur() {
   if (motor) {
-    durum.goruntu = motor.goruntu();
+    // Acilis konumuna ucus suruyorsa (baglan() haritayi yeniden kurar) hedef korunur; yoksa mevcut gorunum
+    durum.goruntu = acilisKonumu || motor.goruntu();
     motor.yoket();
     motor = null;
   }
@@ -745,10 +747,13 @@ function canliKonum() {
 async function acilistaKonumaGit() {
   const kap = $('harita');
   let kullaniciOynatti = false;
-  const isaretle = () => { kullaniciOynatti = true; };
+  const isaretle = () => { kullaniciOynatti = true; acilisKonumu = null; };
   ['pointerdown', 'wheel', 'touchstart'].forEach((o) => kap.addEventListener(o, isaretle, { once: true, passive: true }));
   const konum = await canliKonum();
-  if (konum && !kullaniciOynatti && motor) motor.uc(konum.lat, konum.lon, ACILIS_YAKINLIK);
+  if (!konum || kullaniciOynatti || !motor) return;
+  acilisKonumu = { lat: konum.lat, lon: konum.lon, zoom: ACILIS_YAKINLIK };
+  motor.uc(konum.lat, konum.lon, ACILIS_YAKINLIK);
+  setTimeout(() => { acilisKonumu = null; }, 6000);
 }
 
 /** Bir adimin ogelerini getiren API yolu; ust adim secili degilse null. secili: adim -> secili oge. */
