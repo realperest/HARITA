@@ -277,10 +277,15 @@ body {
 .hava-satir b { font-size: 1rem; font-family: var(--font-sayi); }
 .hava-detay { color: var(--metin-ikincil); font-size: 0.85rem; margin-top: 2px; }
 .hava-uyari { color: var(--uyari); font-size: 0.9rem; font-weight: 700; margin-top: 2px; }
-.hava-zaman { background: var(--yuzey); border: 1px solid var(--sinir); border-radius: var(--radius-kart); padding: 10px 12px; }
+.hava-zaman { background: var(--yuzey); border: 1px solid var(--sinir); border-radius: var(--radius-kart); padding: 10px 22px 6px; }
 .hava-iz { position: relative; height: 6px; background: var(--sinir); border-radius: 3px; }
 .hava-nokta { position: absolute; top: -2px; width: 2px; height: 10px; margin-left: -1px; background: var(--metin-ikincil); }
 .hava-nokta.simdi { background: var(--uyari); }
 .hava-imlec { position: absolute; top: -4px; left: 0; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--ikincil); transition: left 0.7s linear; }
 .hava-imlec.aniden { transition: none; }
 .hava-panel [hidden] { display: none; }
+.hava-saatler { position: relative; height: 18px; margin-top: 12px; }
+.hava-saatler span { position: absolute; top: 0; transform: translateX(-50%); font-family: var(--font-sayi); font-size: 0.7rem; color: var(--metin-ikincil); }
+.hava-saatler span.aktif { color: var(--metin); font-weight: 700; }
+.hava-radar { color: var(--metin-ikincil); font-size: 0.85rem; margin-top: 4px; }
+.hava-radar.yagis { color: var(--ikincil); font-weight: 700; }

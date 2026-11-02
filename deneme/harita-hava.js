@@ -82,6 +82,10 @@ export class HavaKontrolu {
     this.yenile = null;
     this.havaSon = null;
     this.havaIstek = 0;
+    this.ozet = null;
+    this.radarYagis = null;
+    this.radarIstek = 0;
+    this.radarResimleri = new Map();
   }
 
   onAdd(harita) {
@@ -99,13 +103,13 @@ export class HavaKontrolu {
     this.panel.className = 'hava-panel';
     this.panel.hidden = true;
     this.panel.innerHTML = '<div class="hava-kart"><div class="hava-satir"><span class="hava-etiket">HAVA</span><b class="hava-ana"></b></div>'
-      + '<div class="hava-detay"></div><div class="hava-uyari" hidden></div></div>'
-      + '<div class="hava-zaman" hidden><div class="hava-iz"><div class="hava-imlec"></div></div></div>';
+      + '<div class="hava-detay"></div><div class="hava-uyari" hidden></div><div class="hava-radar" hidden></div></div>'
+      + '<div class="hava-zaman" hidden><div class="hava-iz"><div class="hava-imlec"></div></div><div class="hava-saatler"></div></div>';
     harita.getContainer().appendChild(this.panel);
 
     /* setStyle katmanlari siler: radar istenmisse yeni stilde yeniden kurulur. */
     this.stilOlayi = () => { if (this.acik) this.radarYenile().catch((e) => console.warn('Radar yeniden kurulamadi', e)); };
-    this.hareketOlayi = () => { if (this.acik) this.havaGuncelle(); };
+    this.hareketOlayi = () => { if (this.acik) { this.havaGuncelle(); this.radarNoktasi(); } };
     harita.on('style.load', this.stilOlayi);
     harita.on('moveend', this.hareketOlayi);
     return this.kap;
@@ -151,6 +155,9 @@ export class HavaKontrolu {
     this.katmanlariSil();
     this.kareler = [];
     this.havaIstek += 1;
+    this.radarIstek += 1;
+    this.ozet = null;
+    this.radarYagis = null;
     if (this.panel) { this.panel.hidden = true; this.panel.querySelector('.hava-zaman').hidden = true; }
   }
 
@@ -219,6 +226,7 @@ export class HavaKontrolu {
     this.sira = 0;
     this.zamanKur(liste.length);
     this.oynat();
+    this.radarNoktasi();
   }
 
   async radarAc() {
@@ -239,6 +247,14 @@ export class HavaKontrolu {
     const kutu = this.panel.querySelector('.hava-zaman');
     const iz = kutu.querySelector('.hava-iz');
     iz.querySelectorAll('.hava-nokta').forEach((n) => n.remove());
+    const saatler = kutu.querySelector('.hava-saatler');
+    saatler.textContent = '';
+    this.kareler.forEach((k, i) => {
+      const e = document.createElement('span');
+      e.textContent = new Date(k.zaman).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', hour12: false });
+      e.style.left = `${this.yuzde(i, adet)}%`;
+      saatler.appendChild(e);
+    });
     for (let i = 0; i < adet; i += 1) {
       const n = document.createElement('i');
       n.className = `hava-nokta${i === adet - 1 ? ' simdi' : ''}`;
@@ -254,6 +270,7 @@ export class HavaKontrolu {
     imlec.classList.toggle('aniden', basaDondu);
     if (basaDondu) void imlec.offsetWidth;
     imlec.style.left = `${this.yuzde(sira, adet)}%`;
+    this.panel.querySelectorAll('.hava-saatler span').forEach((e, i) => e.classList.toggle('aktif', i === sira));
   }
 
   /* Siradaki kareyi gosterir, oncekini gizler ve bir sonraki gecisi planlar. */
@@ -271,16 +288,72 @@ export class HavaKontrolu {
 
   /* ---- Hava karti ---- */
 
+  /* Karti ozet (saatlik tahmin) ve radar gozlemiyle birlikte cizer. Tahmin bir model ongorusudur; radar o an gercekten
+     yagis gorunup gorunmedigini gosterir. Ikisi celisirse radar satiri uyari olarak one cikar. */
   kartGoster(sonuc) {
+    if (sonuc !== undefined) this.ozet = sonuc;
     const kart = this.panel.querySelector('.hava-kart');
-    if (!sonuc || !this.acik) { kart.hidden = true; return; }
-    kart.querySelector('.hava-ana').textContent = sonuc.ana;
-    kart.querySelector('.hava-detay').textContent = sonuc.detay;
+    const radar = kart.querySelector('.hava-radar');
+    const yagisVar = this.radarYagis === true;
+    if (!this.acik || (!this.ozet && this.radarYagis === null)) { kart.hidden = true; return; }
+    kart.querySelector('.hava-ana').textContent = this.ozet ? this.ozet.ana : 'Tahmin alınamadı';
+    kart.querySelector('.hava-detay').textContent = this.ozet ? this.ozet.detay : '';
+    const uyarilar = this.ozet ? this.ozet.uyarilar : [];
     const uyari = kart.querySelector('.hava-uyari');
-    uyari.textContent = sonuc.uyarilar.join(', ');
-    uyari.hidden = sonuc.uyarilar.length === 0;
-    kart.classList.toggle('uyari-var', sonuc.uyarilar.length > 0);
+    uyari.textContent = uyarilar.join(', ');
+    uyari.hidden = uyarilar.length === 0;
+    radar.hidden = this.radarYagis === null;
+    radar.textContent = yagisVar ? 'Radar: bu noktada şu an yağış görünüyor' : 'Radar: bu noktada yağış görünmüyor';
+    radar.classList.toggle('yagis', yagisVar);
+    kart.classList.toggle('uyari-var', uyarilar.length > 0 || yagisVar);
     kart.hidden = false;
+  }
+
+  /* Radar karesinin haritanin ortasindaki pikseli: yagis ekosu var mi (true/false); resim alinamazsa null. */
+  async radarNoktasi() {
+    if (!this.acik || !this.kareler.length) return;
+    const istek = ++this.radarIstek;
+    const c = this.harita.getCenter();
+    const z = AYAR.MAKS_YAKIN;
+    const n = 2 ** z;
+    const xf = ((c.lng + 180) / 360) * n;
+    const enlem = (c.lat * Math.PI) / 180;
+    const yf = ((1 - Math.asinh(Math.tan(enlem)) / Math.PI) / 2) * n;
+    const adres = this.kareler[this.kareler.length - 1].adres.replace('{z}', z).replace('{x}', Math.floor(xf)).replace('{y}', Math.floor(yf));
+    let sonuc = null;
+    try {
+      const resim = await this.radarResmi(adres);
+      const tuval = document.createElement('canvas');
+      tuval.width = 256;
+      tuval.height = 256;
+      const cizim = tuval.getContext('2d', { willReadFrequently: true });
+      cizim.drawImage(resim, 0, 0);
+      const px = Math.min(253, Math.max(2, Math.floor((xf % 1) * 256)));
+      const py = Math.min(253, Math.max(2, Math.floor((yf % 1) * 256)));
+      const veri = cizim.getImageData(px - 2, py - 2, 5, 5).data;
+      sonuc = false;
+      for (let i = 3; i < veri.length; i += 4) if (veri[i] > 40) { sonuc = true; break; }
+    } catch (hata) {
+      console.warn('Radar noktası okunamadı', hata);
+    }
+    if (istek !== this.radarIstek || !this.acik) return;
+    this.radarYagis = sonuc;
+    this.kartGoster();
+  }
+
+  /* Radar karosunu (CORS acik) yukler; ayni adres tekrar istenmez. */
+  radarResmi(adres) {
+    if (this.radarResimleri.size > 12) this.radarResimleri.clear();
+    if (!this.radarResimleri.has(adres)) {
+      this.radarResimleri.set(adres, new Promise((coz, red) => {
+        const r = new Image();
+        r.crossOrigin = 'anonymous';
+        r.onload = () => coz(r);
+        r.onerror = () => { this.radarResimleri.delete(adres); red(new Error('Radar karosu yüklenemedi')); };
+        r.src = adres;
+      }));
+    }
+    return this.radarResimleri.get(adres);
   }
 
   /* Haritanin ortasindaki konumun havasi; sure dolmadikca ve konum 8 km'den az degistiyse yeniden sormaz. */
@@ -295,7 +368,7 @@ export class HavaKontrolu {
     const istek = ++this.havaIstek;
     try {
       const veri = await this.secenek.havaGetir(konum.lat, konum.lon);
-      if (istek === this.havaIstek) this.kartGoster(havaOzeti((veri.noktalar || [])[0]));
+      if (istek === this.havaIstek) this.kartGoster(havaOzeti((veri.noktalar || [])[0]) || null);
     } catch (hata) {
       console.warn('Hava bilgisi alınamadı', hata);
       this.havaSon.bekle = AYAR.HAVA_HATA_MS;
