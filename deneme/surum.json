@@ -1,4 +1,5 @@
 [
+  {"surum": "261102.2201", "not": "Sayfa acilisinda harita (izin verilirse) konumuna yaklasir; hava dugmesi artik konuma gitmez, kart haritanin ortasini gosterir"},
   {"surum": "261102.2159", "not": "Hava dugmesi acilinca konumuma gider (izin verilirse), kart bulundugun yerin havasini gosterir; onbellek ve yenileme 2 dakika"},
   {"surum": "261102.2157", "not": "Hava tahmini onbellegi 30 dk yerine 5 dk; hava karti 5 dakikada bir yenilenir"},
   {"surum": "261102.2152", "not": "Hava karti: radar noktasinda yagis var/yok satiri (tahmin 0 olsa da radar yagis gosterirse one cikar); radar zaman bandinda saat yazilari"},

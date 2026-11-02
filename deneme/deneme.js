@@ -11,6 +11,7 @@ import { HavaKontrolu } from './harita-hava.js';
 const VARSAYILAN_API = 'https://harita-api.89.45.45.152.sslip.io';
 const VARSAYILAN_KARO = 'https://harita-karo.89.45.45.152.sslip.io';
 const DEPO_ANAHTARI = 'harita_deneme_v1';
+const ACILIS_YAKINLIK = 14;
 const MT_ATIF = '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener">&copy; MapTiler</a> '
   + '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap katkıcıları</a>';
 
@@ -739,6 +740,17 @@ function canliKonum() {
   return canliKonumSozu;
 }
 
+/** Sayfa acilisinda tarayici konumuna yaklasir (izin verilirse). Kullanici o sirada haritayi kendisi oynattiysa dokunmaz.
+ * Izin yoksa ya da konum alinamazsa harita varsayilan gorunumde (Turkiye) kalir. */
+async function acilistaKonumaGit() {
+  const kap = $('harita');
+  let kullaniciOynatti = false;
+  const isaretle = () => { kullaniciOynatti = true; };
+  ['pointerdown', 'wheel', 'touchstart'].forEach((o) => kap.addEventListener(o, isaretle, { once: true, passive: true }));
+  const konum = await canliKonum();
+  if (konum && !kullaniciOynatti && motor) motor.uc(konum.lat, konum.lon, ACILIS_YAKINLIK);
+}
+
 /** Bir adimin ogelerini getiren API yolu; ust adim secili degilse null. secili: adim -> secili oge. */
 function comboYol(adim, secili) {
   const [il, ilce, mahalle, sokak] = secili;
@@ -1362,6 +1374,7 @@ async function baslat() {
 
   katmanSecimiDoldur();
   motorKur();
+  acilistaKonumaGit();
   surumGoster();
   if (durum.anahtar) baglan();
   else durumYenile();
