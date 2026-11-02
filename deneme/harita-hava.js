@@ -102,7 +102,7 @@ export class HavaKontrolu {
     this.panel = document.createElement('div');
     this.panel.className = 'hava-panel';
     this.panel.hidden = true;
-    this.panel.innerHTML = '<div class="hava-kart"><div class="hava-satir"><span class="hava-etiket">HAVA</span><b class="hava-ana"></b></div>'
+    this.panel.innerHTML = '<div class="hava-kart" hidden><div class="hava-satir"><span class="hava-etiket">HAVA</span><b class="hava-ana"></b></div>'
       + '<div class="hava-detay"></div><div class="hava-uyari" hidden></div><div class="hava-radar" hidden></div></div>'
       + '<div class="hava-zaman" hidden><div class="hava-iz"><div class="hava-imlec"></div></div><div class="hava-saatler"></div></div>';
     harita.getContainer().appendChild(this.panel);

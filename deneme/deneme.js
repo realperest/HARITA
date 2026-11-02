@@ -12,7 +12,8 @@ const VARSAYILAN_API = 'https://harita-api.89.45.45.152.sslip.io';
 const VARSAYILAN_KARO = 'https://harita-karo.89.45.45.152.sslip.io';
 const DEPO_ANAHTARI = 'harita_deneme_v1';
 const ACILIS_YAKINLIK = 14;
-let acilisKonumu = null;
+let haritaHazirCoz = () => {};
+const haritaHazir = new Promise((coz) => { haritaHazirCoz = coz; });
 const MT_ATIF = '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener">&copy; MapTiler</a> '
   + '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap katkıcıları</a>';
 
@@ -436,7 +437,8 @@ class MapLibreMotoru {
   }
 
   sigdir(kutu, enBuyuk = 15) { this.h.fitBounds([[kutu[0], kutu[1]], [kutu[2], kutu[3]]], { padding: 40, maxZoom: enBuyuk }); }
-  uc(lat, lon, zoom) { this.h.flyTo({ center: [lon, lat], zoom }); }
+  /** essansiyel: sistemde "hareketi azalt" acik olsa da ucus animasyonu oynar (acilis ucusu icin). */
+  uc(lat, lon, zoom, essansiyel = false) { this.h.flyTo({ center: [lon, lat], zoom, essential: essansiyel }); }
   kutu() { const b = this.h.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]; }
 
   goruntu() {
@@ -613,8 +615,7 @@ function harf(i) {
 
 function motorKur() {
   if (motor) {
-    // Acilis konumuna ucus suruyorsa (baglan() haritayi yeniden kurar) hedef korunur; yoksa mevcut gorunum
-    durum.goruntu = acilisKonumu || motor.goruntu();
+    durum.goruntu = motor.goruntu();
     motor.yoket();
     motor = null;
   }
@@ -742,18 +743,19 @@ function canliKonum() {
   return canliKonumSozu;
 }
 
-/** Sayfa acilisinda tarayici konumuna yaklasir (izin verilirse). Kullanici o sirada haritayi kendisi oynattiysa dokunmaz.
- * Izin yoksa ya da konum alinamazsa harita varsayilan gorunumde (Turkiye) kalir. */
+/** Sayfa acilisinda tarayici konumuna ucarak yaklasir ve konumu pinler (izin verilirse). Konum hemen sorulur (izin penceresi erken
+ * cikar) ama ucus, baglan() haritayi yeniden kurup bitirdikten sonra baslar; yoksa yeniden kurulum ucusu kesip aniden atlatirdi.
+ * Kullanici o sirada haritayi kendisi oynattiysa dokunmaz. Izin yoksa ya da konum alinamazsa harita varsayilan gorunumde kalir. */
 async function acilistaKonumaGit() {
   const kap = $('harita');
   let kullaniciOynatti = false;
-  const isaretle = () => { kullaniciOynatti = true; acilisKonumu = null; };
+  const isaretle = () => { kullaniciOynatti = true; };
   ['pointerdown', 'wheel', 'touchstart'].forEach((o) => kap.addEventListener(o, isaretle, { once: true, passive: true }));
   const konum = await canliKonum();
+  await Promise.race([haritaHazir, new Promise((coz) => setTimeout(coz, 10000))]);
   if (!konum || kullaniciOynatti || !motor) return;
-  acilisKonumu = { lat: konum.lat, lon: konum.lon, zoom: ACILIS_YAKINLIK };
-  motor.uc(konum.lat, konum.lon, ACILIS_YAKINLIK);
-  setTimeout(() => { acilisKonumu = null; }, 6000);
+  motor.pin({ lat: konum.lat, lng: konum.lon }); // konum pinli gorunur (durum.veri.pin: harita yeniden kurulsa da korunur)
+  motor.uc(konum.lat, konum.lon, ACILIS_YAKINLIK, true);
 }
 
 /** Bir adimin ogelerini getiren API yolu; ust adim secili degilse null. secili: adim -> secili oge. */
@@ -1381,8 +1383,12 @@ async function baslat() {
   motorKur();
   acilistaKonumaGit();
   surumGoster();
-  if (durum.anahtar) baglan();
-  else durumYenile();
+  try {
+    if (durum.anahtar) await baglan();
+    else durumYenile();
+  } finally {
+    haritaHazirCoz();
+  }
 }
 
 baslat();

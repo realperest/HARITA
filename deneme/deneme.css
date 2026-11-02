@@ -283,7 +283,7 @@ body {
 .hava-nokta.simdi { background: var(--uyari); }
 .hava-imlec { position: absolute; top: -4px; left: 0; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--ikincil); transition: left 0.7s linear; }
 .hava-imlec.aniden { transition: none; }
-.hava-panel [hidden] { display: none; }
+.hava-panel[hidden], .hava-panel [hidden] { display: none; }
 .hava-saatler { position: relative; height: 18px; margin-top: 12px; }
 .hava-saatler span { position: absolute; top: 0; transform: translateX(-50%); font-family: var(--font-sayi); font-size: 0.7rem; color: var(--metin-ikincil); }
 .hava-saatler span.aktif { color: var(--metin); font-weight: 700; }
