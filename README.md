@@ -90,4 +90,5 @@ pytest   # PostgreSQL (55432) ve Redis (56379) gerekir, bkz. tests/conftest.py
 ## Istemci
 
 - `istemci/harita-istemci.js` (tarayici): MapLibre haritasi kurar; rota, matris, arama, adres, yerlesim, Valhalla. Derleyici gerektirmez.
+- `istemci/harita-3d.js` (tarayici): 3D bina katmani ve kucuk "3D bina" dugmesi (`UcBoyutKontrolu`, ya da kendi dugmeniz icin `ucBoyutDegistir`). Kapaliyken hicbir kaynak tuketmez; yalniz vektor haritada calisir.
 - `istemci/harita_istemci.py` (arka uc, httpx): ayni uclarin asenkron Python sarmalayicisi.
