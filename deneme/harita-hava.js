@@ -24,7 +24,9 @@ export const AYAR = {
   ZAMAN_ASIMI_MS: 10000,
   STIL_DENEME: 20,
   STIL_BEKLEME_MS: 250,
-  HAVA_YENILE_MS: 5 * 60 * 1000,
+  HAVA_YENILE_MS: 2 * 60 * 1000,
+  KONUM_ZAMAN_ASIMI_MS: 8000,
+  KONUM_YAKINLIK: 9,
   HAVA_HATA_MS: 2 * 60 * 1000,
   HAVA_TASIMA_M: 8000,
 };
@@ -140,6 +142,7 @@ export class HavaKontrolu {
     this.panel.hidden = false;
     this.havaSon = null;
     this.havaGuncelle();
+    this.konumaGit();
     try {
       await this.radarAc();
     } catch (hata) {
@@ -147,6 +150,17 @@ export class HavaKontrolu {
       this.kapat();
       this.dugme.title = 'Hava durumu şu an alınamadı';
     }
+  }
+
+  /* Dugme acilirken kullanicinin konumuna gider (izin verilirse): kart varsayilan harita merkezi yerine bulundugu yerin havasini gosterir.
+     Konum alinamazsa (izin yok, zaman asimi) harita oldugu yerde kalir ve kart haritanin ortasini gosterir. */
+  konumaGit() {
+    if (this.secenek.konumaGit === false || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((k) => {
+      if (!this.acik || !this.harita) return;
+      this.harita.easeTo({ center: [k.coords.longitude, k.coords.latitude], zoom: Math.max(this.harita.getZoom(), AYAR.KONUM_YAKINLIK), duration: 800 });
+    }, (hata) => console.warn('Konum alınamadı, harita merkezi kullanılacak', hata.message),
+    { enableHighAccuracy: false, timeout: AYAR.KONUM_ZAMAN_ASIMI_MS, maximumAge: 5 * 60 * 1000 });
   }
 
   kapat() {
