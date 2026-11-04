@@ -25,6 +25,7 @@ const MT_ATIF = '<a href="https://www.maptiler.com/copyright/" target="_blank" r
  * karma (uydu + kendi yol ve etiketlerimiz). acik: arayuz acik temaya gecer.
  */
 const KATMANLAR = [
+  { kod: 'oto', grup: 'Otomatik', ad: 'Otomatik (gündüz açık, gece koyu)', tur: 'oto' },
   { kod: 'v-dark', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - koyu', tur: 'vektor', tema: 'dark' },
   { kod: 'v-light', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - açık', tur: 'vektor', tema: 'light', acik: true },
   { kod: 'v-white', grup: 'Kendi verimiz (HARITA)', ad: 'Sokak - beyaz', tur: 'vektor', tema: 'white', acik: true },
@@ -36,6 +37,9 @@ const KATMANLAR = [
   { kod: 'mt-streets', grup: 'MapTiler', ad: 'Sokak (MapTiler)', tur: 'mt', harita: 'streets-v2', uzanti: 'png', acik: true },
   { kod: 'mt-osm', grup: 'MapTiler', ad: 'Ayrıntılı (MapTiler)', tur: 'mt', harita: 'openstreetmap', uzanti: 'png', acik: true },
 ];
+const KOYU_KATMAN = KATMANLAR.find((k) => k.kod === 'v-dark');
+const ACIK_KATMAN = KATMANLAR.find((k) => k.kod === 'v-light');
+
 /** Konum bu kadar metreden uzak ve ardisik bu kadar olcumde rota disindaysa yeniden rota istenir. */
 const SAPMA_ESIK_M = 35;
 const SAPMA_ARDISIK = 3;
@@ -67,10 +71,15 @@ const durum = {
   anahtar: '',
   sunucuAnahtar: '',
   yap: null,
-  katmanKod: 'v-dark',
+  katmanKod: 'oto',
   mtAnahtar: '',
   profil: 'araba',
   ses: true,
+  tercih: { otoyol: false, ucret: false },
+  alternatifler: [],
+  secilenAlt: 0,
+  ilerleme: 0,
+  yolTarifiAcik: false,
   simAcik: false,
   simHiz: 50,
   konum: null,
@@ -91,7 +100,7 @@ const durum = {
   izleme: null,
   ekranKilidi: null,
   ilkKonum: true,
-  cizim: { 'rota-tum': BOS, 'rota-kalan': BOS, hedef: BOS, 'manevra-nokta': BOS, uyari: BOS },
+  cizim: { 'rota-alt-0': BOS, 'rota-alt-1': BOS, 'rota-tum': BOS, 'rota-kalan': BOS, hedef: BOS, 'manevra-nokta': BOS, uyari: BOS },
 };
 const simDurum = { d: 0, sapma: 0, sapmaAdim: 0, zamanlayici: null };
 let harita = null;
@@ -172,7 +181,7 @@ function depoYaz(ad, veri) {
 }
 
 function ayarKaydet() {
-  depoYaz(NAV_DEPO, { katmanKod: durum.katmanKod, profil: durum.profil, ses: durum.ses, simAcik: durum.simAcik, simHiz: durum.simHiz });
+  depoYaz(NAV_DEPO, { katmanKod: durum.katmanKod, profil: durum.profil, ses: durum.ses, simAcik: durum.simAcik, simHiz: durum.simHiz, tercih: durum.tercih });
 }
 
 const anahtarTemizle = (deger) => String(deger || '').replace(/['"\s]/g, '');
@@ -331,21 +340,35 @@ function rotaHazirla(v, ilkDurak = 0) {
   };
 }
 
-/** Baslangictan sirayla duraklara rota ister. Baslangicta yon varsa Valhalla aracin gittigi yondeki yolu secer. */
-async function rotaIste(baslangic, duraklar, ilkDurak = 0) {
+/**
+ * Baslangictan sirayla duraklara rota ister. Baslangicta yon varsa Valhalla aracin gittigi yondeki yolu secer.
+ * alternatifIste: tek hedefte (ara nokta yok) 2 alternatif rota da istenir; rota.alternatifler icinde gelir.
+ */
+async function rotaIste(baslangic, duraklar, ilkDurak = 0, alternatifIste = false) {
   const bas = { lat: baslangic.lat, lon: baslangic.lon };
   if (Number.isFinite(baslangic.yon) && (baslangic.hiz ?? 0) > 2) Object.assign(bas, { heading: Math.round(baslangic.yon), heading_tolerance: 60 });
-  const v = await api('/valhalla/route', {
-    method: 'POST',
-    body: JSON.stringify({
-      // Ara (gecis) noktalari: GPX izinin yollarindan gecmek icin; "through" bacak bolmez, duraga ulasildi denmez
-      locations: [bas, ...duraklar.flatMap((d) => [...(d.ara || []).map((a) => ({ lat: a.lat, lon: a.lon, type: 'through' })),
-        { lat: d.lat, lon: d.lon }])],
-      costing: COSTING[durum.profil],
-      directions_options: { language: 'tr-TR', units: 'kilometers' },
-    }),
-  });
-  return rotaHazirla(v, ilkDurak);
+  const costing = COSTING[durum.profil];
+  const tercih = {};
+  if (durum.profil !== 'yaya') {
+    if (durum.tercih.otoyol) tercih.use_highways = 0;
+    if (durum.tercih.ucret) tercih.use_tolls = 0;
+  }
+  const tekHedef = duraklar.length === 1 && !(duraklar[0].ara || []).length;
+  const govde = {
+    // Ara (gecis) noktalari: GPX izinin yollarindan gecmek icin; "through" bacak bolmez, duraga ulasildi denmez
+    locations: [bas, ...duraklar.flatMap((d) => [...(d.ara || []).map((a) => ({ lat: a.lat, lon: a.lon, type: 'through' })),
+      { lat: d.lat, lon: d.lon }])],
+    costing,
+    directions_options: { language: 'tr-TR', units: 'kilometers' },
+  };
+  if (Object.keys(tercih).length) govde.costing_options = { [costing]: tercih };
+  if (alternatifIste && tekHedef) govde.alternates = 2;
+  const v = await api('/valhalla/route', { method: 'POST', body: JSON.stringify(govde) });
+  const rota = rotaHazirla(v, ilkDurak);
+  // Cok uzun dolambacli alternatifler elenir
+  rota.alternatifler = (alternatifIste && tekHedef ? v.alternates || [] : []).map((alt) => rotaHazirla(alt, ilkDurak))
+    .filter((alt) => alt.sure <= rota.sure * 1.8);
+  return rota;
 }
 
 /** Henuz ulasilmamis duraklar (yeniden rota ve baslangic icin). */
@@ -612,10 +635,33 @@ function varsayilanYapilandirma() {
   };
 }
 
-/** Secili katman; MapTiler anahtari yoksa MapTiler katmanlari yerine koyu sokak katmani kullanilir. */
+/**
+ * Verilen anda ve konumda gunes ufkun ustunde mi (gun dogumu / batimi yaklasimi, +-birkac dakika). Konum verilmezse
+ * cihaz konumu, yoksa harita merkezi kullanilir. Kutup bolgelerinde gun / gece sabittir.
+ */
+function gunduzMu(tarih = new Date(), konum = null) {
+  const c = konum || (durum.konum ? { lat: durum.konum.lat, lon: durum.konum.lon }
+    : harita ? { lat: harita.getCenter().lat, lon: harita.getCenter().lng } : { lat: 39, lon: 35 });
+  const rad = Math.PI / 180;
+  const yilGunu = Math.floor((Date.UTC(tarih.getUTCFullYear(), tarih.getUTCMonth(), tarih.getUTCDate()) - Date.UTC(tarih.getUTCFullYear(), 0, 0)) / 86400000);
+  const b = (2 * Math.PI * (yilGunu - 81)) / 364;
+  const zamanDenklemiDk = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
+  const sapma = 23.45 * rad * Math.sin((2 * Math.PI * (284 + yilGunu)) / 365);
+  const cosH = (Math.sin(-0.833 * rad) - Math.sin(c.lat * rad) * Math.sin(sapma)) / (Math.cos(c.lat * rad) * Math.cos(sapma));
+  if (cosH >= 1) return false;
+  if (cosH <= -1) return true;
+  const yarimGunDk = (Math.acos(cosH) / rad) * 4;
+  const ogleDk = 720 - 4 * c.lon - zamanDenklemiDk;
+  const simdiDk = tarih.getUTCHours() * 60 + tarih.getUTCMinutes();
+  const fark = ((((simdiDk - ogleDk + 720) % 1440) + 1440) % 1440) - 720;
+  return Math.abs(fark) <= yarimGunDk;
+}
+
+/** Secili katman ("oto" gunduz acik, gece koyu sokak katmani olur); MapTiler anahtari yoksa MapTiler katmanlari yerine koyu sokak katmani kullanilir. */
 function aktifKatman() {
-  const k = KATMANLAR.find((x) => x.kod === durum.katmanKod) || KATMANLAR[0];
-  return k.tur !== 'vektor' && !durum.mtAnahtar ? KATMANLAR[0] : k;
+  if (durum.katmanKod === 'oto') return gunduzMu() ? ACIK_KATMAN : KOYU_KATMAN;
+  const k = KATMANLAR.find((x) => x.kod === durum.katmanKod) || KOYU_KATMAN;
+  return k.tur !== 'vektor' && !durum.mtAnahtar ? KOYU_KATMAN : k;
 }
 
 function mtAdres(k) {
@@ -669,13 +715,13 @@ function katmanSecimiDoldur() {
   const gruplar = new Map();
   for (const k of KATMANLAR) {
     if (!gruplar.has(k.grup)) gruplar.set(k.grup, el('optgroup', { label: k.grup }));
-    const gerekli = k.tur !== 'vektor' && !durum.mtAnahtar;
+    const gerekli = k.tur !== 'vektor' && k.tur !== 'oto' && !durum.mtAnahtar;
     const secenek = el('option', { value: k.kod, metin: gerekli ? `${k.ad} (MapTiler anahtarı gerekli)` : k.ad });
     if (gerekli) secenek.disabled = true;
     gruplar.get(k.grup).append(secenek);
   }
   gruplar.forEach((g) => sec.append(g));
-  sec.value = aktifKatman().kod;
+  sec.value = durum.katmanKod === 'oto' ? 'oto' : aktifKatman().kod;
 }
 
 /** Rota, hedef ve manevra katmanlari; stil her degistiginde yeniden eklenir. */
@@ -685,6 +731,10 @@ function kaplamaKur() {
   }
   const yuvarlak = { 'line-join': 'round', 'line-cap': 'round' };
   const kat = (tanim) => { if (!harita.getLayer(tanim.id)) harita.addLayer(tanim); };
+  for (const i of [0, 1]) {
+    kat({ id: `rota-alt-${i}`, type: 'line', source: `rota-alt-${i}`, layout: yuvarlak,
+      paint: { 'line-color': '#8FB8E8', 'line-opacity': 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3, 18, 9] } });
+  }
   kat({ id: 'rota-tum', type: 'line', source: 'rota-tum', layout: yuvarlak,
     paint: { 'line-color': '#8B949E', 'line-opacity': 0.5, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3, 18, 10] } });
   kat({ id: 'rota-kalan-kenar', type: 'line', source: 'rota-kalan', layout: yuvarlak,
@@ -785,6 +835,8 @@ function arayuzGuncelle() {
   $('manevra').hidden = !nav;
   $('alt-ipucu').hidden = mod !== 'plan';
   $('ozet').hidden = mod === 'plan';
+  $('sayfa-tutac').hidden = mod === 'plan';
+  $('hiz-kutu').hidden = !nav;
   $('baslat').hidden = mod !== 'onizleme';
   $('iptal').hidden = mod !== 'onizleme';
   $('bitir').hidden = !nav;
@@ -796,14 +848,29 @@ function arayuzGuncelle() {
   $('durak-ekle').textContent = durum.durakEkle ? 'Durak ekleniyor: arayın ya da dokunun' : 'Durak ekle';
   $('durak-ekle').classList.toggle('etkin', durum.durakEkle);
   $('ses').textContent = durum.ses ? 'Ses: açık' : 'Ses: kapalı';
+  $('ses-onay').checked = durum.ses;
+  $('tercih-bolum').hidden = durum.profil === 'yaya';
+  profilGoster();
+  if (mod === 'plan') sayfaAc(false);
+  if (!nav) yolTarifiAc(false);
   document.documentElement.style.setProperty('--alt-yukseklik', `${altYukseklik()}px`);
+}
+
+/** Ulasim segmentini ve gizli secimi gunceller. */
+function profilGoster() {
+  $('profil').value = durum.profil;
+  document.querySelectorAll('#profil-segment button').forEach((d) => {
+    const etkin = d.dataset.profil === durum.profil;
+    d.classList.toggle('etkin', etkin);
+    d.setAttribute('aria-pressed', String(etkin));
+  });
 }
 
 function ozetYaz(kalanSn, kalanM, hizMs) {
   $('kalan-sure').textContent = sureYaz(kalanSn);
   $('kalan-mesafe').textContent = mesafeYaz(kalanM);
   $('varis').textContent = saatYaz(new Date(Date.now() + kalanSn * 1000));
-  $('hiz').textContent = Number.isFinite(hizMs) ? `${sayi(hizMs * 3.6)} km/sa` : '-';
+  $('hiz').textContent = Number.isFinite(hizMs) ? String(Math.round(hizMs * 3.6)) : '0';
 }
 
 /** Manevra simgesi: Valhalla'nin donus oncesi ve sonrasi yonlerinin farki kadar dondurulmus ok; varista hedef isareti. */
@@ -882,6 +949,7 @@ function konumGeldi(k) {
   if (yolda) veriYaz('rota-kalan', cizgi([o.nokta, ...rota.koord.slice(o.segman + 1)]));
 
   const kalanM = Math.max(0, rota.toplam - o.ilerleme);
+  durum.ilerleme = o.ilerleme;
   if (yolda && kalanM <= VARIS_ESIK_M) { navBitir(true); return; }
   // Ara duraklar: durak noktasina gelince bir sonraki duraga gecilir
   const bacak = durum.gecilenDurak - rota.ilkDurak;
@@ -904,10 +972,21 @@ function konumGeldi(k) {
     veriYaz('manevra-nokta', nokta(rota.koord[rota.manevralar[i].begin_shape_index] || rota.koord[rota.koord.length - 1]));
   }
   if (!durum.yenidenRotaSuruyor) manevraKartiYaz(rota, i, manevraM);
+  if (durum.yolTarifiAcik) yolTarifiYaz();
   if (yolda) sesliYonlendir(rota, i, manevraM, k.hiz);
   if (yolda) sesliUyarilar(rota, o.ilerleme, k.hiz);
   ozetYaz(kalanSure(rota, o.ilerleme), kalanM, k.hiz);
   kameraGuncelle(gosterilen, yon, k.hiz);
+}
+
+function olcumIsle(olcum) {
+  if (durum.simAcik && durum.mod === 'nav') return;
+  const c = olcum.coords;
+  konumGeldi({
+    lat: c.latitude, lon: c.longitude, dogruluk: c.accuracy,
+    hiz: Number.isFinite(c.speed) ? c.speed : null,
+    yon: Number.isFinite(c.heading) && (c.speed ?? 0) > 1 ? c.heading : null,
+  });
 }
 
 function konumIzlemeBaslat() {
@@ -917,15 +996,7 @@ function konumIzlemeBaslat() {
   }
   if (durum.izleme != null) return;
   durum.izleme = navigator.geolocation.watchPosition(
-    (olcum) => {
-      if (durum.simAcik && durum.mod === 'nav') return;
-      const c = olcum.coords;
-      konumGeldi({
-        lat: c.latitude, lon: c.longitude, dogruluk: c.accuracy,
-        hiz: Number.isFinite(c.speed) ? c.speed : null,
-        yon: Number.isFinite(c.heading) && (c.speed ?? 0) > 1 ? c.heading : null,
-      });
-    },
+    olcumIsle,
     (hata) => {
       console.warn('Konum alınamadı', hata.code, hata.message);
       durum.izleme = null;
@@ -1154,9 +1225,12 @@ async function onizlemeHesapla() {
   }
   planMesaj('Rota hesaplanıyor...');
   try {
-    const rota = await rotaIste(baslangic, duraklar, ilkDurak);
+    const rota = await rotaIste(baslangic, duraklar, ilkDurak, true);
     rotaAyarla(rota);
+    durum.alternatifler = [rota, ...rota.alternatifler];
+    durum.secilenAlt = 0;
     durum.mod = 'onizleme';
+    alternatifleriGoster();
     planMesaj(not, not ? 'uyari' : '');
     arayuzGuncelle();
     ozetYaz(rota.sure, rota.toplam, durum.konum?.hiz);
@@ -1198,11 +1272,12 @@ async function havaGoster(rota) {
 
 function hedefTemizle() {
   $('hava').hidden = true;
-  Object.assign(durum, { hedef: null, duraklar: [], gecilenDurak: 0, durakEkle: false, rota: null, mod: 'plan' });
+  Object.assign(durum, { hedef: null, duraklar: [], gecilenDurak: 0, durakEkle: false, rota: null, mod: 'plan', alternatifler: [], secilenAlt: 0 });
   for (const ad of Object.keys(durum.cizim)) veriYaz(ad, BOS);
   $('hedef-ara').value = '';
   duraklarListesiYaz();
   planMesaj('');
+  alternatifleriGoster();
   arayuzGuncelle();
 }
 
@@ -1243,9 +1318,12 @@ async function navBaslat() {
   // Rota ilk duraktan basladiysa (konumsuz simulasyon) o durak gecilmis sayilir
   durum.gecilenDurak = durum.rota.ilkDurak;
   duraklariCiz();
-  Object.assign(durum, { mod: 'nav', takip: true, sapmaSayac: 0, sonYenidenRota: 0 });
+  Object.assign(durum, { mod: 'nav', takip: true, sapmaSayac: 0, sonYenidenRota: 0, alternatifler: [], secilenAlt: 0 });
+  alternatifleriGoster();
   arayuzGuncelle();
+  sayfaAc(false);
   ekranAcikTut(true);
+  arkaPlanKoru(true);
   const ilk = durum.rota.manevralar[0];
   durum.soylenen.set(`${durum.rota.no}:0`, { uzak: true, yakin: true });
   soyle(`Navigasyon başladı. ${buyukBasla(ilk?.verbal_pre_transition_instruction || '')}`, true);
@@ -1257,6 +1335,7 @@ async function navBaslat() {
 function navBitir(varildi = false) {
   simDurdur();
   ekranAcikTut(false);
+  arkaPlanKoru(false);
   if (varildi) {
     const son = durum.rota?.manevralar.at(-1);
     soyle(son?.verbal_pre_transition_instruction || 'Hedefinize ulaştınız.', true);
@@ -1277,6 +1356,201 @@ function navBitir(varildi = false) {
   duraklariCiz();
   // Yolda yeniden rota yalniz kalan duraklari kapsayabilir; onizleme tum duraklarla yeniden hesaplanir
   onizlemeHesapla();
+}
+
+/* ---------- Alternatif rotalar ---------- */
+
+/** Alternatif rotalari haritada soluk cizgi, altta secim dugmesi olarak gosterir (yalniz onizlemede ve tek hedefte). */
+function alternatifleriGoster() {
+  const liste = durum.mod === 'onizleme' ? durum.alternatifler : [];
+  const diger = liste.filter((_, i) => i !== durum.secilenAlt);
+  [0, 1].forEach((i) => veriYaz(`rota-alt-${i}`, diger[i] ? cizgi(diger[i].koord) : BOS));
+  const kutu = $('alternatifler');
+  kutu.replaceChildren();
+  kutu.hidden = liste.length < 2;
+  if (liste.length < 2) return;
+  const enHizli = Math.min(...liste.map((r) => r.sure));
+  liste.forEach((r, i) => {
+    const fark = r.sure - enHizli;
+    const etkin = i === durum.secilenAlt;
+    const dugme = el('button', { type: 'button', sinif: `alt-secim${etkin ? ' etkin' : ''}`, 'aria-pressed': String(etkin) },
+      el('span', { sinif: 'as-sure', metin: sureYaz(r.sure) }),
+      el('span', { sinif: 'as-fark', metin: `${fark < 30 ? 'En hızlı' : `+${sureYaz(fark)}`} · ${mesafeYaz(r.toplam)}` }));
+    dugme.addEventListener('click', () => rotaSec(i));
+    kutu.append(dugme);
+  });
+}
+
+/** Onizlemede verilen siradaki alternatifi etkin rota yapar. */
+function rotaSec(i) {
+  if (durum.mod !== 'onizleme' || !durum.alternatifler[i] || i === durum.secilenAlt) return;
+  durum.secilenAlt = i;
+  rotaAyarla(durum.alternatifler[i]);
+  ozetYaz(durum.rota.sure, durum.rota.toplam, durum.konum?.hiz);
+  alternatifleriGoster();
+  havaGoster(durum.rota);
+}
+
+/** Haritada soluk alternatif cizgisine dokunulduysa onu secer; dokunulduysa true doner. */
+function alternatifDokunmasi(olay) {
+  if (durum.mod !== 'onizleme' || durum.alternatifler.length < 2) return false;
+  const katmanlar = ['rota-alt-0', 'rota-alt-1'].filter((k) => harita.getLayer(k));
+  const kutu = [[olay.point.x - 10, olay.point.y - 10], [olay.point.x + 10, olay.point.y + 10]];
+  const bulunan = harita.queryRenderedFeatures(kutu, { layers: katmanlar });
+  if (!bulunan.length) return false;
+  const diger = durum.alternatifler.filter((_, i) => i !== durum.secilenAlt);
+  const hedef = diger[Number(bulunan[0].layer.id.slice(-1))];
+  if (hedef) rotaSec(durum.alternatifler.indexOf(hedef));
+  return true;
+}
+
+/* ---------- Paneller: alt sayfa, sol cekmece, yol tarifi ---------- */
+
+/** Alt sayfanin ayrintilarini acar / kapatir. */
+function sayfaAc(ac) {
+  $('alt').classList.toggle('acik', ac);
+  $('sayfa-tutac').setAttribute('aria-expanded', String(ac));
+  $('sayfa-tutac').setAttribute('aria-label', ac ? 'Ayrıntıları kapat' : 'Ayrıntıları aç');
+}
+
+/** Sol cekmeceyi acar / kapatir; kapaliyken odak alamaz (inert). */
+function menuAc(ac) {
+  $('cekmece').classList.toggle('acik', ac);
+  $('cekmece').setAttribute('aria-hidden', String(!ac));
+  $('cekmece').toggleAttribute('inert', !ac);
+  $('perde').hidden = !ac;
+  $('menu-ac').setAttribute('aria-expanded', String(ac));
+  if (ac) $('menu-kapat').focus();
+  else $('menu-ac').focus();
+}
+
+/** Ustteki manevra kartina dokununca siradaki donuslerin listesini acar / kapatir. */
+function yolTarifiAc(ac) {
+  durum.yolTarifiAcik = ac;
+  $('yol-tarifi').hidden = !ac;
+  $('manevra-ana').setAttribute('aria-expanded', String(ac));
+  if (ac) yolTarifiYaz();
+}
+
+function yolTarifiYaz() {
+  const liste = $('yol-tarifi');
+  liste.replaceChildren();
+  const rota = durum.rota;
+  if (!rota) return;
+  const bas = Math.max(0, durum.sonManevra);
+  rota.manevralar.slice(bas + 1, bas + 13).forEach((m) => {
+    liste.append(el('li', {}, el('span', { sinif: 'yt-mesafe', metin: mesafeYaz(Math.max(0, m.basM - durum.ilerleme)) }),
+      el('span', { metin: buyukBasla(m.instruction) })));
+  });
+  if (!liste.children.length) liste.append(el('li', {}, el('span', { metin: 'Başka dönüş yok, hedefe kadar düz devam edin.' })));
+}
+
+/** Dikey surukleme: esik asilirsa yukari / asagi, hareketsiz dokunusta (ya da klavyede) dokun geri cagrisi. */
+function dikeyKaydir(oge, { yukari, asagi, dokun }) {
+  let bas = null;
+  let tasindi = false;
+  oge.addEventListener('pointerdown', (o) => { bas = o.clientY; tasindi = false; oge.setPointerCapture?.(o.pointerId); });
+  oge.addEventListener('pointermove', (o) => { if (bas !== null && Math.abs(o.clientY - bas) > 10) tasindi = true; });
+  oge.addEventListener('pointerup', (o) => {
+    if (bas === null) return;
+    const fark = o.clientY - bas;
+    bas = null;
+    if (tasindi && fark <= -30) yukari?.();
+    else if (tasindi && fark >= 30) asagi?.();
+    else if (!tasindi) dokun?.();
+  });
+  oge.addEventListener('pointercancel', () => { bas = null; });
+  oge.addEventListener('click', (o) => { if (o.detail === 0) dokun?.(); });
+}
+
+/** Ekranin sol kenarindan saga cekince cekmeceyi acar, cekmeceyi sola cekince kapatir (dokunmatik). */
+function menuKaydirmaKur() {
+  let bas = null;
+  let kaynak = '';
+  document.addEventListener('pointerdown', (o) => {
+    bas = null;
+    if (o.pointerType !== 'touch') return;
+    if ($('cekmece').classList.contains('acik')) [bas, kaynak] = [o.clientX, 'kapat'];
+    else if (o.clientX < 18 && durum.mod !== 'nav') [bas, kaynak] = [o.clientX, 'ac'];
+  }, { passive: true });
+  document.addEventListener('pointermove', (o) => {
+    if (bas === null) return;
+    const dx = o.clientX - bas;
+    if (kaynak === 'ac' && dx > 50) { menuAc(true); bas = null; }
+    else if (kaynak === 'kapat' && dx < -50) { menuAc(false); bas = null; }
+  }, { passive: true });
+  document.addEventListener('pointerup', () => { bas = null; });
+  document.addEventListener('pointercancel', () => { bas = null; });
+}
+
+/* ---------- Arka plan: ekran kilitliyken / uygulama aktif degilken ---------- */
+
+let sessizSesOge = null;
+
+/** 1 saniyelik sessiz ses (8 kHz, 8 bit, mono) uretir; mobil tarayicilar ses calan sayfayi arka planda daha az askiya alir. */
+function sessizSesAdresi() {
+  const ornek = 8000;
+  const tampon = new ArrayBuffer(44 + ornek);
+  const gorunum = new DataView(tampon);
+  const yaz = (konum, metin) => [...metin].forEach((h, i) => gorunum.setUint8(konum + i, h.charCodeAt(0)));
+  yaz(0, 'RIFF');
+  gorunum.setUint32(4, 36 + ornek, true);
+  yaz(8, 'WAVE');
+  yaz(12, 'fmt ');
+  gorunum.setUint32(16, 16, true);
+  gorunum.setUint16(20, 1, true);
+  gorunum.setUint16(22, 1, true);
+  gorunum.setUint32(24, ornek, true);
+  gorunum.setUint32(28, ornek, true);
+  gorunum.setUint16(32, 1, true);
+  gorunum.setUint16(34, 8, true);
+  yaz(36, 'data');
+  gorunum.setUint32(40, ornek, true);
+  new Uint8Array(tampon, 44).fill(128);
+  return URL.createObjectURL(new Blob([tampon], { type: 'audio/wav' }));
+}
+
+/**
+ * Navigasyon suresince sayfayi canli tutmaya calisir: sessiz ses dongusu + medya oturumu (kilit ekraninda "Navigasyon"
+ * gorunur). Tarayici kisitlari nedeniyle kesin degildir; en guvenli yol uygulama (yerel kabuk) surumudur.
+ */
+function arkaPlanKoru(ac) {
+  try {
+    if (ac) {
+      if (!sessizSesOge) {
+        sessizSesOge = new Audio(sessizSesAdresi());
+        sessizSesOge.loop = true;
+      }
+      sessizSesOge.play().catch((hata) => console.warn('Arka plan sesi başlatılamadı', hata));
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: 'Navigasyon', artist: durum.hedef?.ad || 'HARITA', album: 'HARITA navigasyon' });
+        navigator.mediaSession.playbackState = 'playing';
+        // Kilit ekranindan duraklatma sesi kesmesin: oturum canli kalir
+        for (const eylem of ['play', 'pause']) {
+          navigator.mediaSession.setActionHandler(eylem, () => sessizSesOge?.play().catch((hata) => console.warn('Ses sürdürülemedi', hata)));
+        }
+      }
+    } else {
+      sessizSesOge?.pause();
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'none';
+        navigator.mediaSession.metadata = null;
+      }
+    }
+  } catch (hata) {
+    console.warn('Arka plan koruması kurulamadı', hata);
+  }
+}
+
+/** Uygulamaya donuldugunde: ekran kilidi ve ses geri alinir, konum izleme canlandirilir, tek olcumle rota konumuna yetisilir. */
+function onPlanaDonuldu() {
+  if (durum.mod !== 'nav') return;
+  ekranAcikTut(true);
+  sessizSesOge?.play().catch((hata) => console.warn('Arka plan sesi sürdürülemedi', hata));
+  if (durum.simAcik || !('geolocation' in navigator)) return;
+  if (durum.izleme == null) konumIzlemeBaslat();
+  navigator.geolocation.getCurrentPosition(olcumIsle, (hata) => console.warn('Dönüşte konum alınamadı', hata.message),
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 });
 }
 
 /* ---------- Arama ---------- */
@@ -1318,6 +1592,7 @@ const aramaYap = gecikmeli(async (q) => {
 /** Haritaya dokunulan noktayi hedef yapar; adini ters aramayla bulur. */
 async function haritaDokunma(olay) {
   if (durum.mod === 'nav') return;
+  if (alternatifDokunmasi(olay)) return;
   const { lat, lng } = olay.lngLat;
   const hedef = { lat, lon: lng, ad: 'Haritadan seçilen nokta' };
   hedefSec(hedef);
@@ -1382,11 +1657,28 @@ function olaylariBagla() {
   $('hedef-ara').addEventListener('keydown', (o) => {
     if (o.key === 'Enter') $('sonuclar').querySelector('button')?.click();
   });
-  $('profil').addEventListener('change', (o) => {
-    durum.profil = o.target.value;
+  document.querySelectorAll('#profil-segment button').forEach((d) => d.addEventListener('click', () => {
+    if (durum.profil === d.dataset.profil) return;
+    durum.profil = d.dataset.profil;
     ayarKaydet();
+    arayuzGuncelle();
     if (durum.mod === 'onizleme') onizlemeHesapla();
-  });
+  }));
+  for (const kod of ['otoyol', 'ucret']) {
+    $(`tercih-${kod}`).addEventListener('change', (o) => {
+      durum.tercih[kod] = o.target.checked;
+      ayarKaydet();
+      if (durum.mod === 'onizleme') onizlemeHesapla();
+    });
+  }
+  $('menu-ac').addEventListener('click', () => menuAc(true));
+  $('menu-kapat').addEventListener('click', () => menuAc(false));
+  $('perde').addEventListener('click', () => menuAc(false));
+  document.addEventListener('keydown', (o) => { if (o.key === 'Escape' && $('cekmece').classList.contains('acik')) menuAc(false); });
+  menuKaydirmaKur();
+  dikeyKaydir($('sayfa-tutac'), { yukari: () => sayfaAc(true), asagi: () => sayfaAc(false), dokun: () => sayfaAc(!$('alt').classList.contains('acik')) });
+  dikeyKaydir($('ozet').querySelector('.ozet-metin'), { yukari: () => sayfaAc(true), asagi: () => sayfaAc(false) });
+  $('manevra-ana').addEventListener('click', () => yolTarifiAc(!durum.yolTarifiAcik));
   $('sim').addEventListener('change', (o) => {
     durum.simAcik = o.target.checked;
     ayarKaydet();
@@ -1421,12 +1713,14 @@ function olaylariBagla() {
   $('baslat').addEventListener('click', navBaslat);
   $('iptal').addEventListener('click', hedefTemizle);
   $('bitir').addEventListener('click', () => navBitir(false));
-  $('ses').addEventListener('click', () => {
-    durum.ses = !durum.ses;
+  const sesDegistir = (acik) => {
+    durum.ses = acik;
     if (!durum.ses && 'speechSynthesis' in window) speechSynthesis.cancel();
     ayarKaydet();
     arayuzGuncelle();
-  });
+  };
+  $('ses').addEventListener('click', () => sesDegistir(!durum.ses));
+  $('ses-onay').addEventListener('change', (o) => sesDegistir(o.target.checked));
   $('ortala').addEventListener('click', () => {
     durum.takip = true;
     arayuzGuncelle();
@@ -1446,9 +1740,22 @@ function olaylariBagla() {
   harita.on('rotatestart', takipBirak);
   harita.on('click', haritaDokunma);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && durum.mod === 'nav') ekranAcikTut(true);
+    if (document.visibilityState === 'visible') onPlanaDonuldu();
   });
   new ResizeObserver(() => document.documentElement.style.setProperty('--alt-yukseklik', `${altYukseklik()}px`)).observe($('alt'));
+}
+
+/** "Otomatik" katmanda gun dogumu / batimi gecince haritayi 5 dakikada bir kontrol edip acik / koyu stile gecirir. */
+function otoTemaIzle() {
+  let son = aktifKatman().kod;
+  setInterval(() => {
+    if (durum.katmanKod !== 'oto') return;
+    const simdi = aktifKatman().kod;
+    if (simdi === son) return;
+    son = simdi;
+    temaUygula();
+    harita.setStyle(stilKur(), { diff: false });
+  }, 5 * 60 * 1000);
 }
 
 /** Cihazda Turkce ses yoksa bir kez uyarir (sesler tarayicida gec yuklenebilir). */
@@ -1468,15 +1775,18 @@ function sesDenetle() {
 async function baslat() {
   const ayar = depoOku(NAV_DEPO);
   // Eski kayitta yalniz tema varsa (acik/koyu) karsilik gelen sokak katmanina cevir
-  const eskiKatman = ayar.tema === 'light' ? 'v-light' : 'v-dark';
+  const eskiKatman = ayar.tema ? (ayar.tema === 'light' ? 'v-light' : 'v-dark') : 'oto';
   Object.assign(durum, {
     katmanKod: KATMANLAR.some((k) => k.kod === ayar.katmanKod) ? ayar.katmanKod : eskiKatman,
+    tercih: { otoyol: Boolean(ayar.tercih?.otoyol), ucret: Boolean(ayar.tercih?.ucret) },
     profil: COSTING[ayar.profil] ? ayar.profil : 'araba',
     ses: ayar.ses !== false,
     simAcik: Boolean(ayar.simAcik),
     simHiz: Number(ayar.simHiz) || 50,
   });
   $('profil').value = durum.profil;
+  $('tercih-otoyol').checked = durum.tercih.otoyol;
+  $('tercih-ucret').checked = durum.tercih.ucret;
   $('sim').checked = durum.simAcik;
   $('sim-hiz').value = String(durum.simHiz);
 
@@ -1499,10 +1809,11 @@ async function baslat() {
   });
   harita.on('style.load', kaplamaKur);
   // 3D bina dugmesi: tema secili katmana uyar (uydu / karma katmanda koyu tema)
-  harita.addControl(new UcBoyutKontrolu({ get tema() { const k = aktifKatman(); return k.tur === 'vektor' ? k.tema : 'dark'; } }), 'top-left');
+  harita.addControl(new UcBoyutKontrolu({ get tema() { const k = aktifKatman(); return k.tur === 'vektor' ? k.tema : 'dark'; } }), 'top-right');
   konumIsaretiKur();
   olaylariBagla();
   arayuzGuncelle();
+  otoTemaIzle();
   surumGoster();
   sesDenetle();
   konumIzlemeBaslat();

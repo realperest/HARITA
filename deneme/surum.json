@@ -1,4 +1,5 @@
 [
+  {"surum": "261104.0945", "not": "Navigasyon yeniden tasarlandi: tek arama kutusu, soldan cekmece (ayarlar), alttan sayfa (ozet + ayrinti), ustten yol tarifi; alternatif rotalar, otoyol / ucret kacinma, otomatik gunduz-gece tema, hiz gostergesi, arka plan korumasi (sessiz ses + medya oturumu)"},
   {"surum": "261102.2214", "not": "Hava dugmesi acilinca konum alinir ve olcum (hava karti + radar noktasi) konuma gore yapilir; konum yoksa harita ortasi; kart basligi hangisi oldugunu yazar"},
   {"surum": "261102.2212", "not": "Acilista konuma ucarak gidilir ve konum pinlenir; hava paneli kapaliyken bos kutu gorunmez"},
   {"surum": "261102.2208", "not": "Acilista konuma yaklasma duzeltildi: baglan() haritayi yeniden kurarken ucus hedefi korunur"},

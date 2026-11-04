@@ -9,32 +9,75 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261031.2124">
+  <link rel="stylesheet" href="navigasyon.css?v=261104.0945">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
 
-  <!-- Planlama: hedef arama ve secenekler -->
-  <section id="plan" class="ust-kart" aria-label="Rota planlama">
-    <div class="ust-satir">
-      <span class="marka">HARITA <span class="soluk">navigasyon</span></span>
-      <nav class="baglantilar">
-        <a href="index.html">Harita denemesi</a>
-      </nav>
+  <!-- Ust: tek arama kutusu; menu soldan cekmece acar -->
+  <section id="plan" class="arama" aria-label="Hedef arama">
+    <div class="arama-satir">
+      <button class="ikon-dugme" id="menu-ac" type="button" aria-label="Menüyü aç" aria-expanded="false" aria-controls="cekmece">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <input class="arama-girdi" id="hedef-ara" type="search" placeholder="Nereye?" autocomplete="off" spellcheck="false" aria-label="Hedef ara">
+      <button class="ikon-dugme" id="konumum" type="button" aria-label="Konumuma git">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+      </button>
     </div>
-    <input class="girdi" id="hedef-ara" type="search" placeholder="Nereye? Adres, yer veya sokak" autocomplete="off" spellcheck="false" aria-label="Hedef ara">
     <ul class="liste" id="sonuclar"></ul>
-    <ol class="durak-listesi" id="durak-listesi" aria-label="Duraklar"></ol>
-    <button class="dugme ikincil kucuk durak-ekle" id="durak-ekle" type="button" hidden>Durak ekle</button>
-    <div class="secenekler">
-      <label class="secim">Profil
-        <select class="girdi kucuk" id="profil">
-          <option value="araba">Araba</option>
-          <option value="motosiklet">Motosiklet</option>
-          <option value="yaya">Yaya</option>
-        </select>
-      </label>
-      <label class="onay"><input type="checkbox" id="sim"> Simülasyon</label>
+    <p class="mesaj" id="plan-mesaj" role="status"></p>
+  </section>
+
+  <!-- Sol cekmece: ayarlar (cekince ya da menu ile acilir) -->
+  <div class="perde" id="perde" hidden></div>
+  <aside class="cekmece" id="cekmece" aria-label="Ayarlar" aria-hidden="true" inert>
+    <header class="cekmece-baslik">
+      <span class="marka">HARITA <span class="soluk">navigasyon</span></span>
+      <button class="ikon-dugme" id="menu-kapat" type="button" aria-label="Menüyü kapat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+
+    <div class="bolum">
+      <h2>Ulaşım</h2>
+      <div class="segment" id="profil-segment" role="group" aria-label="Ulaşım türü">
+        <button type="button" data-profil="araba">Araba</button>
+        <button type="button" data-profil="motosiklet">Motosiklet</button>
+        <button type="button" data-profil="yaya">Yaya</button>
+      </div>
+      <select id="profil" hidden aria-hidden="true">
+        <option value="araba">Araba</option>
+        <option value="motosiklet">Motosiklet</option>
+        <option value="yaya">Yaya</option>
+      </select>
+    </div>
+
+    <div class="bolum" id="tercih-bolum">
+      <h2>Rota tercihi</h2>
+      <label class="anahtar"><span>Otoyoldan kaçın</span><input type="checkbox" id="tercih-otoyol"></label>
+      <label class="anahtar"><span>Ücretli yoldan kaçın</span><input type="checkbox" id="tercih-ucret"></label>
+    </div>
+
+    <div class="bolum">
+      <h2>Harita</h2>
+      <select class="girdi" id="katman" aria-label="Harita katmanı"></select>
+    </div>
+
+    <div class="bolum">
+      <h2>Ses</h2>
+      <label class="anahtar"><span>Sesli yönlendirme</span><input type="checkbox" id="ses-onay"></label>
+    </div>
+
+    <div class="bolum">
+      <h2>Rota dosyası</h2>
+      <label class="dugme ikincil kucuk dosya-sec">GPX yükle<input type="file" id="gpx-yukle" accept=".gpx,application/gpx+xml" hidden></label>
+      <label class="anahtar" title="GPX'teki çizilmiş yolu izler; kapalıysa duraklar arasında en hızlı yol hesaplanır"><span>GPX izini takip et</span><input type="checkbox" id="iz-takip" checked></label>
+    </div>
+
+    <div class="bolum">
+      <h2>Deneme</h2>
+      <label class="anahtar"><span>Simülasyon</span><input type="checkbox" id="sim"></label>
       <label class="secim" id="sim-hiz-alan">Hız
         <select class="girdi kucuk" id="sim-hiz">
           <option value="30">30 km/sa</option>
@@ -44,56 +87,59 @@
           <option value="120">120 km/sa</option>
         </select>
       </label>
-      <button class="dugme ikincil kucuk" id="konumum" type="button">Konumum</button>
+      <a class="baglanti" href="index.html">Harita denemesi</a>
     </div>
-    <div class="secenekler">
-      <button class="dugme ikincil kucuk" id="paylas" type="button" hidden>Paylaş</button>
-      <button class="dugme ikincil kucuk" id="gpx-indir" type="button" hidden>GPX indir</button>
-      <button class="dugme ikincil kucuk" id="google-ac" type="button" hidden>Google'da aç</button>
-      <button class="dugme ikincil kucuk" id="yandex-ac" type="button" hidden>Yandex'te aç</button>
-      <label class="dugme ikincil kucuk dosya-sec">GPX yükle<input type="file" id="gpx-yukle" accept=".gpx,application/gpx+xml" hidden></label>
-      <label class="onay" title="GPX'teki çizilmiş yolu izler; kapalıysa duraklar arasında en hızlı yol hesaplanır"><input type="checkbox" id="iz-takip" checked> İzi takip et</label>
-    </div>
-    <p class="mesaj" id="plan-mesaj" role="status"></p>
-    <p class="mesaj hava" id="hava" hidden></p>
-  </section>
+  </aside>
 
-  <!-- Navigasyon: siradaki manevra -->
-  <section id="manevra" class="ust-kart manevra" aria-live="polite" hidden>
-    <div class="manevra-ana">
+  <!-- Ust: siradaki manevra (dokununca yol tarifi acilir) -->
+  <section id="manevra" class="manevra" aria-live="polite" hidden>
+    <button class="manevra-ana" id="manevra-ana" type="button" aria-expanded="false" aria-controls="yol-tarifi">
       <svg class="manevra-simge" viewBox="-12 -12 24 24" aria-hidden="true">
         <path id="simge-ok" d="M0 -10 L7.5 -1.5 L2.6 -1.5 L2.6 10 L-2.6 10 L-2.6 -1.5 L-7.5 -1.5 Z"></path>
         <path id="simge-hedef" d="M0 10 C-1 6 -7 1.5 -7 -3.5 A7 7 0 0 1 7 -3.5 C7 1.5 1 6 0 10 Z M0 -6.2 A2.7 2.7 0 1 0 0.01 -6.2 Z" fill-rule="evenodd" display="none"></path>
       </svg>
-      <div class="manevra-yazi">
-        <div class="manevra-mesafe" id="manevra-mesafe">-</div>
-        <div class="manevra-metin" id="manevra-metin"></div>
-      </div>
-    </div>
+      <span class="manevra-yazi">
+        <span class="manevra-mesafe" id="manevra-mesafe">-</span>
+        <span class="manevra-metin" id="manevra-metin"></span>
+      </span>
+    </button>
     <div class="manevra-sonra" id="manevra-sonra" hidden></div>
+    <ol class="yol-tarifi" id="yol-tarifi" aria-label="Yol tarifi" hidden></ol>
   </section>
 
-  <!-- Alt cubuk: ozet ve eylemler -->
-  <section id="alt" class="alt-cubuk" aria-label="Rota özeti">
+  <!-- Alt: ozet; cekince ayrintilar acilir -->
+  <section id="alt" class="sayfa" aria-label="Rota özeti">
+    <button class="tutac" id="sayfa-tutac" type="button" aria-label="Ayrıntıları aç" aria-expanded="false" aria-controls="sayfa-detay"><span></span></button>
     <p class="ipucu" id="alt-ipucu">Hedef seçin: arayın ya da haritaya dokunun.</p>
-    <div class="ozet" id="ozet" hidden>
-      <div class="ozet-kutu"><span class="deger" id="kalan-sure">-</span><span class="etiket">süre</span></div>
-      <div class="ozet-kutu"><span class="deger" id="kalan-mesafe">-</span><span class="etiket">mesafe</span></div>
-      <div class="ozet-kutu"><span class="deger" id="varis">-</span><span class="etiket">varış</span></div>
-      <div class="ozet-kutu"><span class="deger" id="hiz">-</span><span class="etiket">hız</span></div>
-    </div>
-    <div class="dugmeler">
-      <select class="girdi katman-sec" id="katman" aria-label="Harita katmanı"></select>
+    <div class="sayfa-ozet" id="ozet" hidden>
+      <div class="hiz-kutu" id="hiz-kutu" hidden><span class="hiz-deger" id="hiz">0</span><span class="hiz-birim">km/sa</span></div>
+      <div class="ozet-metin">
+        <span class="sure-buyuk" id="kalan-sure">-</span>
+        <span class="ozet-alt"><span id="kalan-mesafe">-</span> · <span id="varis">-</span> varış</span>
+      </div>
       <button class="dugme" id="baslat" type="button" hidden>Başlat</button>
-      <button class="dugme ikincil" id="iptal" type="button" hidden>İptal</button>
-      <button class="dugme ikincil" id="ortala" type="button" hidden>Ortala</button>
-      <button class="dugme ikincil" id="sapma" type="button" hidden>Sapma dene</button>
-      <button class="dugme ikincil" id="ses" type="button" hidden>Ses: açık</button>
       <button class="dugme tehlike" id="bitir" type="button" hidden>Bitir</button>
     </div>
+    <div class="alternatifler" id="alternatifler" role="group" aria-label="Alternatif rotalar" hidden></div>
+    <div class="sayfa-detay" id="sayfa-detay">
+      <ol class="durak-listesi" id="durak-listesi" aria-label="Duraklar"></ol>
+      <p class="mesaj hava" id="hava" hidden></p>
+      <div class="eylemler">
+        <button class="dugme ikincil kucuk durak-ekle" id="durak-ekle" type="button" hidden>Durak ekle</button>
+        <button class="dugme ikincil kucuk" id="paylas" type="button" hidden>Paylaş</button>
+        <button class="dugme ikincil kucuk" id="gpx-indir" type="button" hidden>GPX indir</button>
+        <button class="dugme ikincil kucuk" id="google-ac" type="button" hidden>Google'da aç</button>
+        <button class="dugme ikincil kucuk" id="yandex-ac" type="button" hidden>Yandex'te aç</button>
+        <button class="dugme ikincil kucuk" id="ses" type="button" hidden>Ses: açık</button>
+        <button class="dugme ikincil kucuk" id="sapma" type="button" hidden>Sapma dene</button>
+        <button class="dugme ikincil kucuk" id="iptal" type="button" hidden>İptal</button>
+      </div>
+    </div>
   </section>
 
+  <button class="dugme yuzen" id="ortala" type="button" hidden>Ortala</button>
+
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261102.2137"></script>
+  <script type="module" src="navigasyon.js?v=261104.0945"></script>
 </body>
 </html>
