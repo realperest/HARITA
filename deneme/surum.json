@@ -1,4 +1,5 @@
 [
+  {"surum": "261104.1108", "not": "Durak ekle artik ozetin altinda gorunur ve yolda da calisir (arama kutusu gecici acilir, haritaya dokunarak da eklenir); Sesi dene: konusma basladi / bitti durumunu yazar, iPhone icin zil anahtari uyarisi"},
   {"surum": "261104.1028", "not": "Ses duzeltmesi: ilk dokunusta ses motoru uyandirilir, cancel sonrasi kisa bekleme, ses hatalari ekranda yazilir; menude Sesi dene dugmesi (secilen sesi gosterir)"},
   {"surum": "261104.1013", "not": "Navigasyon: Varisimi paylas (canli konum + tahmini varis, takip.html baglantisi); izleyen sayfa WebSocket ile canli izler, kopunca yeniden baglanir"},
   {"surum": "261104.0953", "not": "Navigasyon: yolda ara (yakit, yemek, eczane, ATM, market, otel; dokununca durak), Ev / Is / son hedefler, hiz limiti tabelasi ve asim uyarisi (OSM maxspeed verisi olan yollarda); disa aktarma dugmeleri cekmeceye"},

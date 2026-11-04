@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261104.1028">
+  <link rel="stylesheet" href="navigasyon.css?v=261104.1108">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
@@ -128,6 +128,7 @@
       <button class="dugme" id="baslat" type="button" hidden>Başlat</button>
       <button class="dugme tehlike" id="bitir" type="button" hidden>Bitir</button>
     </div>
+    <div class="cipler hizli" id="hizli"><button class="cip durak-ekle" id="durak-ekle" type="button" hidden>+ Durak ekle</button></div>
     <div class="alternatifler" id="alternatifler" role="group" aria-label="Alternatif rotalar" hidden></div>
     <div class="sayfa-detay" id="sayfa-detay">
       <ol class="durak-listesi" id="durak-listesi" aria-label="Duraklar"></ol>
@@ -138,7 +139,6 @@
         <ul class="liste yolda-liste" id="yolda-sonuc"></ul>
       </div>
       <div class="eylemler">
-        <button class="dugme ikincil kucuk durak-ekle" id="durak-ekle" type="button" hidden>Durak ekle</button>
         <button class="dugme ikincil kucuk" id="ev-kaydet" type="button" hidden>Ev yap</button>
         <button class="dugme ikincil kucuk" id="is-kaydet" type="button" hidden>İş yap</button>
         <button class="dugme ikincil kucuk" id="varis-paylas" type="button" hidden>Varışımı paylaş</button>
@@ -156,6 +156,6 @@
   <div class="bildirim" id="bildirim" role="status" hidden></div>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261104.1028"></script>
+  <script type="module" src="navigasyon.js?v=261104.1108"></script>
 </body>
 </html>

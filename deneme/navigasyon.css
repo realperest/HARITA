@@ -243,7 +243,9 @@ html, body {
 .durak-no { flex: none; min-width: 44px; color: var(--metin-ikincil); font-family: var(--font-sayi); font-size: 12px; }
 .durak-ad { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .durak-sil { flex: none; padding: 2px 8px; background: none; border: 1px solid var(--sinir); border-radius: var(--radius-buton); color: var(--metin-ikincil); font: inherit; font-size: 12px; cursor: pointer; }
-.durak-ekle.etkin { border-color: var(--uyari); color: var(--uyari); }
+.hizli { margin-top: 10px; }
+.hizli:has(button[hidden]) { display: none; }
+.cip.durak-ekle.etkin { border-color: var(--uyari); color: var(--uyari); }
 
 /* Konum isareti */
 .konum-isaret { width: 34px; height: 34px; }

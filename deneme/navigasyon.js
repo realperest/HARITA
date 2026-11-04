@@ -627,14 +627,16 @@ function soyle(metin, oncelikli = false) {
     speechSynthesis.resume();
     speechSynthesis.speak(konusma);
   };
-  // Android Chrome'da cancel()'dan hemen sonra speak() cumleyi yutabilir: kisa beklenir
-  if (oncelikli && (speechSynthesis.speaking || speechSynthesis.pending)) {
+  // Android Chrome'da cancel()'dan hemen sonra speak() cumleyi yutabilir: kisa beklenir.
+  // Uyandirma cumlesi sirada ise kesilmez: iPhone'da kesip bekleyince konusma dokunusun disina cikar ve calmaz.
+  if (oncelikli && !acilisSuruyor && (speechSynthesis.speaking || speechSynthesis.pending)) {
     speechSynthesis.cancel();
     setTimeout(oku, 150);
   } else oku();
 }
 
 let sesAcildi = false;
+let acilisSuruyor = false;
 
 /**
  * Mobil tarayicilar sesli okumayi yalniz kullanici dokunusuyla baslatir (iPhone'da ilk konusma dokunusun icinde olmali).
@@ -647,6 +649,11 @@ function sesiAc() {
     speechSynthesis.resume();
     const bos = new SpeechSynthesisUtterance(' ');
     bos.volume = 0;
+    acilisSuruyor = true;
+    const bitir = () => { acilisSuruyor = false; };
+    bos.onend = bitir;
+    bos.onerror = bitir;
+    setTimeout(bitir, 800);
     speechSynthesis.speak(bos);
   } catch (hata) {
     console.warn('Ses motoru uyandırılamadı', hata);
@@ -669,7 +676,10 @@ function sesHatasi(kod) {
   bildir(metin);
 }
 
-/** Menudeki "Sesi dene": test cumlesini okutur ve hangi sesin secildigini yazar. */
+/**
+ * Menudeki "Sesi dene": test cumlesini dokunusun icinde, bekleme olmadan okutur; secilen sesi ve konusmanin baslayip bitmedigini yazar.
+ * "Baslayip bitti ama duyulmuyor" ise telefon sesi (zil anahtari, medya sesi) kapali demektir; "baslamadi" ise ses motoru calismiyor demektir.
+ */
 function sesiDene() {
   const bilgi = $('ses-bilgi');
   if (!('speechSynthesis' in window)) {
@@ -682,13 +692,26 @@ function sesiDene() {
     ayarKaydet();
     arayuzGuncelle();
   }
-  sesAcildi = false;
-  sesiAc();
   const ses = turkceSes();
-  const sesSayisi = speechSynthesis.getVoices().length;
-  bilgi.textContent = ses ? `Türkçe ses: ${ses.name}` : `Türkçe ses bulunamadı (${sesSayisi} ses var); varsayılan ses denenecek.`;
+  const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const kok = ses ? `Türkçe ses: ${ses.name}` : `Türkçe ses bulunamadı (${speechSynthesis.getVoices().length} ses var); varsayılan ses denenecek.`;
   bilgi.className = `mesaj ${ses ? 'basari' : 'uyari'}`;
-  soyle('Sesli yönlendirme çalışıyor.', true);
+  bilgi.textContent = kok;
+  const konusma = new SpeechSynthesisUtterance('Sesli yönlendirme çalışıyor.');
+  konusma.lang = 'tr-TR';
+  if (ses) konusma.voice = ses;
+  let basladi = false;
+  konusma.onstart = () => { basladi = true; bilgi.textContent = `${kok} · konuşma başladı`; };
+  konusma.onend = () => {
+    bilgi.textContent = `${kok} · konuşma bitti${iphone ? '. Duymadıysanız: iPhone sol kenardaki zil anahtarı sessizde olmamalı, medya sesini açın.' : '. Duymadıysanız medya sesini ve telefonun sesli okuma ayarını kontrol edin.'}`;
+  };
+  konusma.onerror = (olay) => {
+    bilgi.textContent = `${kok} · hata: ${olay.error}`;
+    sesHatasi(olay.error);
+  };
+  speechSynthesis.resume();
+  speechSynthesis.speak(konusma);
+  setTimeout(() => { if (!basladi) bilgi.textContent = `${kok} · ses motoru başlamadı (telefonun sesli okuma ayarını kontrol edin).`; }, 2500);
 }
 
 /** Siradaki manevra icin uzak ve yakin anonslari bir kez yapar; esikler hiza gore buyur. */
@@ -923,8 +946,8 @@ function rotayaSigdir(rota) {
 function arayuzGuncelle() {
   const { mod } = durum;
   const nav = mod === 'nav';
-  $('plan').hidden = nav;
-  $('manevra').hidden = !nav;
+  $('plan').hidden = nav && !durum.durakEkle;
+  $('manevra').hidden = !nav || durum.durakEkle;
   $('alt-ipucu').hidden = mod !== 'plan';
   $('ozet').hidden = mod === 'plan';
   $('sayfa-tutac').hidden = mod === 'plan';
@@ -937,7 +960,7 @@ function arayuzGuncelle() {
   $('ortala').hidden = !nav || durum.takip;
   $('sapma').hidden = !(nav && durum.simAcik);
   $('sim-hiz-alan').hidden = !durum.simAcik;
-  $('durak-ekle').hidden = mod !== 'onizleme';
+  $('durak-ekle').hidden = mod === 'plan';
   $('ev-kaydet').hidden = mod !== 'onizleme';
   $('is-kaydet').hidden = mod !== 'onizleme';
   $('yolda').hidden = mod === 'plan';
@@ -945,7 +968,7 @@ function arayuzGuncelle() {
   $('varis-paylas').textContent = durum.paylasim ? 'Paylaşımı durdur' : 'Varışımı paylaş';
   $('varis-baglanti').hidden = !nav || !durum.paylasim;
   $('paylasim-rozet').hidden = !durum.paylasim;
-  $('durak-ekle').textContent = durum.durakEkle ? 'Durak ekleniyor: arayın ya da dokunun' : 'Durak ekle';
+  $('durak-ekle').textContent = durum.durakEkle ? 'Durak ekleniyor: arayın ya da haritaya dokunun' : '+ Durak ekle';
   $('durak-ekle').classList.toggle('etkin', durum.durakEkle);
   $('ses').textContent = durum.ses ? 'Ses: açık' : 'Ses: kapalı';
   $('ses-onay').checked = durum.ses;
@@ -1168,16 +1191,27 @@ function simDurdur() {
  * Ardindan baslangictan (konum ya da harita merkezi) rota onizlemesi hesaplanir.
  */
 async function hedefSec(hedef) {
+  const yolda = durum.mod === 'nav';
   if (durum.durakEkle && durum.duraklar.length) durum.duraklar.push(hedef);
   else durum.duraklar = [hedef];
   durum.durakEkle = false;
-  durum.gecilenDurak = 0;
+  // Yolda gecilen duraklar korunur; onizlemede yeni secimle bastan baslanir
+  if (!yolda) durum.gecilenDurak = 0;
   durum.hedef = hedef;
   sonYerEkle(hedef);
   $('sonuclar').replaceChildren();
   $('hedef-ara').value = '';
   duraklariCiz();
   duraklarListesiYaz();
+  if (yolda) {
+    arayuzGuncelle();
+    if (durum.konum) {
+      durum.sonYenidenRota = 0;
+      soyle(`${hedef.ad} durak olarak eklendi.`);
+      await yenidenRota(durum.konum);
+    }
+    return;
+  }
   await onizlemeHesapla();
 }
 
@@ -1187,6 +1221,7 @@ function duraklarListesiYaz() {
   liste.replaceChildren();
   durum.duraklar.forEach((d, i) => {
     const sil = el('button', { type: 'button', sinif: 'durak-sil', 'aria-label': `${i + 1}. duragi kaldir`, metin: 'Kaldır' });
+    sil.hidden = durum.mod === 'nav';
     sil.addEventListener('click', () => durakSil(i));
     const son = i === durum.duraklar.length - 1;
     liste.append(el('li', {}, el('span', { sinif: 'durak-no', metin: son ? 'Hedef' : `${i + 1}.` }), el('span', { sinif: 'durak-ad', metin: d.ad }), sil));
@@ -1992,7 +2027,7 @@ const aramaYap = gecikmeli(async (q) => {
 
 /** Haritaya dokunulan noktayi hedef yapar; adini ters aramayla bulur. */
 async function haritaDokunma(olay) {
-  if (durum.mod === 'nav') return;
+  if (durum.mod === 'nav' && !durum.durakEkle) return;
   if (alternatifDokunmasi(olay)) return;
   const { lat, lng } = olay.lngLat;
   const hedef = { lat, lon: lng, ad: 'Haritadan seçilen nokta' };
@@ -2059,7 +2094,7 @@ function olaylariBagla() {
     if (o.target.value.trim()) aramaYap(o.target.value);
     else { aramaSirasi += 1; kayitliYerleriYaz(); }
   });
-  $('hedef-ara').addEventListener('focus', () => { if (!$('hedef-ara').value.trim() && durum.mod !== 'nav') kayitliYerleriYaz(); });
+  $('hedef-ara').addEventListener('focus', () => { if (!$('hedef-ara').value.trim() && (durum.mod !== 'nav' || durum.durakEkle)) kayitliYerleriYaz(); });
   $('varis-paylas').addEventListener('click', varisPaylasDegistir);
   $('varis-baglanti').addEventListener('click', paylasimBaglantisiniKopyala);
   $('ev-kaydet').addEventListener('click', () => hedefiKaydet('ev'));
@@ -2118,6 +2153,8 @@ function olaylariBagla() {
   });
   $('durak-ekle').addEventListener('click', () => {
     durum.durakEkle = !durum.durakEkle;
+    // Yolda arama kutusu gecici acilir; harita gorunsun diye alt sayfa kapatilir
+    if (durum.durakEkle && durum.mod === 'nav') sayfaAc(false);
     arayuzGuncelle();
     if (durum.durakEkle) $('hedef-ara').focus();
   });
