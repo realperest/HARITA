@@ -616,14 +616,79 @@ function yolAdiDuzelt(metin) {
 
 function soyle(metin, oncelikli = false) {
   if (!durum.ses || !metin || !('speechSynthesis' in window)) return;
-  if (oncelikli) speechSynthesis.cancel();
   // Valhalla Turkce metinlerinde sayi ile birim bitisik gelebiliyor ("2kilometre"); okunurken ayrilir
-  const konusma = new SpeechSynthesisUtterance(yolAdiDuzelt(metin).replace(/(\d)([a-zçğıöşü])/gi, '$1 $2'));
-  konusma.lang = 'tr-TR';
+  const duzgun = yolAdiDuzelt(metin).replace(/(\d)([a-zçğıöşü])/gi, '$1 $2');
+  const oku = () => {
+    const konusma = new SpeechSynthesisUtterance(duzgun);
+    konusma.lang = 'tr-TR';
+    const ses = turkceSes();
+    if (ses) konusma.voice = ses;
+    konusma.onerror = (olay) => sesHatasi(olay.error);
+    speechSynthesis.resume();
+    speechSynthesis.speak(konusma);
+  };
+  // Android Chrome'da cancel()'dan hemen sonra speak() cumleyi yutabilir: kisa beklenir
+  if (oncelikli && (speechSynthesis.speaking || speechSynthesis.pending)) {
+    speechSynthesis.cancel();
+    setTimeout(oku, 150);
+  } else oku();
+}
+
+let sesAcildi = false;
+
+/**
+ * Mobil tarayicilar sesli okumayi yalniz kullanici dokunusuyla baslatir (iPhone'da ilk konusma dokunusun icinde olmali).
+ * Ilk dokunusta sessiz, bos bir cumle okutarak ses motoru uyandirilir.
+ */
+function sesiAc() {
+  if (sesAcildi || !('speechSynthesis' in window)) return;
+  sesAcildi = true;
+  try {
+    speechSynthesis.resume();
+    const bos = new SpeechSynthesisUtterance(' ');
+    bos.volume = 0;
+    speechSynthesis.speak(bos);
+  } catch (hata) {
+    console.warn('Ses motoru uyandırılamadı', hata);
+  }
+}
+
+/** Ses hatasini kullaniciya anlasilir bildirir (30 sn'de bir); kesilme / iptal hatalari bizim kendi kesmemizdir, bildirilmez. */
+function sesHatasi(kod) {
+  console.warn('Sesli okuma hatası', kod);
+  if (['interrupted', 'canceled'].includes(kod) || Date.now() - (sesHatasi.son || 0) < 30000) return;
+  sesHatasi.son = Date.now();
+  const metin = {
+    'not-allowed': 'Tarayıcı sesi engelledi: sayfaya bir kez dokunun ve "Sesi dene"yi kullanın.',
+    'synthesis-failed': 'Telefonun konuşma motoru çalışmadı. Ayarlar > Erişilebilirlik > Metni sese (Google) bölümünü kontrol edin.',
+    'synthesis-unavailable': 'Telefonda sesli okuma motoru yok. Ayarlar > Erişilebilirlik > Metni sese bölümünü kontrol edin.',
+    'language-unavailable': 'Telefonda Türkçe ses yüklü değil. Metni sese ayarlarından Türkçe sesi indirin.',
+    'voice-unavailable': 'Seçilen ses kullanılamıyor. Metni sese ayarlarından Türkçe sesi indirin.',
+    network: 'Bu ses internet gerektiriyor; bağlantınızı kontrol edin.',
+  }[kod] || `Sesli okuma hatası: ${kod}`;
+  bildir(metin);
+}
+
+/** Menudeki "Sesi dene": test cumlesini okutur ve hangi sesin secildigini yazar. */
+function sesiDene() {
+  const bilgi = $('ses-bilgi');
+  if (!('speechSynthesis' in window)) {
+    bilgi.textContent = 'Bu tarayıcı sesli okumayı desteklemiyor.';
+    bilgi.className = 'mesaj hata';
+    return;
+  }
+  if (!durum.ses) {
+    durum.ses = true;
+    ayarKaydet();
+    arayuzGuncelle();
+  }
+  sesAcildi = false;
+  sesiAc();
   const ses = turkceSes();
-  if (ses) konusma.voice = ses;
-  konusma.onerror = (olay) => console.warn('Sesli okuma hatası', olay.error);
-  speechSynthesis.speak(konusma);
+  const sesSayisi = speechSynthesis.getVoices().length;
+  bilgi.textContent = ses ? `Türkçe ses: ${ses.name}` : `Türkçe ses bulunamadı (${sesSayisi} ses var); varsayılan ses denenecek.`;
+  bilgi.className = `mesaj ${ses ? 'basari' : 'uyari'}`;
+  soyle('Sesli yönlendirme çalışıyor.', true);
 }
 
 /** Siradaki manevra icin uzak ve yakin anonslari bir kez yapar; esikler hiza gore buyur. */
@@ -1362,7 +1427,7 @@ async function navBaslat() {
   arayuzGuncelle();
   sayfaAc(false);
   ekranAcikTut(true);
-  arkaPlanKoru(true);
+  setTimeout(() => { if (durum.mod === 'nav') arkaPlanKoru(true); }, 2500);
   hizLimitiYukle(durum.rota);
   const ilk = durum.rota.manevralar[0];
   durum.soylenen.set(`${durum.rota.no}:0`, { uzak: true, yakin: true });
@@ -2056,7 +2121,9 @@ function olaylariBagla() {
     arayuzGuncelle();
     if (durum.durakEkle) $('hedef-ara').focus();
   });
-  $('baslat').addEventListener('click', navBaslat);
+  $('baslat').addEventListener('click', () => { sesiAc(); navBaslat(); });
+  $('ses-dene').addEventListener('click', sesiDene);
+  document.addEventListener('pointerdown', sesiAc, { once: true, passive: true });
   $('iptal').addEventListener('click', hedefTemizle);
   $('bitir').addEventListener('click', () => navBitir(false));
   const sesDegistir = (acik) => {

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261104.1013">
+  <link rel="stylesheet" href="navigasyon.css?v=261104.1028">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
@@ -67,6 +67,8 @@
     <div class="bolum">
       <h2>Ses</h2>
       <label class="anahtar"><span>Sesli yönlendirme</span><input type="checkbox" id="ses-onay"></label>
+      <button class="dugme ikincil kucuk" id="ses-dene" type="button">Sesi dene</button>
+      <p class="mesaj" id="ses-bilgi" role="status"></p>
     </div>
 
     <div class="bolum">
@@ -154,6 +156,6 @@
   <div class="bildirim" id="bildirim" role="status" hidden></div>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261104.1013"></script>
+  <script type="module" src="navigasyon.js?v=261104.1028"></script>
 </body>
 </html>
