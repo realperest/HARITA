@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0E1116">
+  <meta name="robots" content="noindex">
+  <title>HARITA Takip</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="takip.css?v=261104.1013">
+</head>
+<body>
+  <div id="harita" class="harita" aria-label="Harita"></div>
+
+  <!-- Ust: canli durum ve varis bilgisi -->
+  <section class="kart" id="kart" aria-live="polite">
+    <div class="kart-ust"><span class="durum-nokta" id="durum-nokta"></span><span id="durum-metin">Bağlanıyor...</span></div>
+    <div class="kart-ana"><span class="buyuk" id="varis">-</span><span class="soluk" id="varis-etiket">varış</span></div>
+    <div class="kart-alt" id="kart-alt">Konum bekleniyor.</div>
+  </section>
+
+  <button class="dugme yuzen" id="takip-et" type="button" hidden>Takip et</button>
+
+  <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
+  <script type="module" src="takip.js?v=261104.1013"></script>
+</body>
+</html>

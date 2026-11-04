@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261104.0953">
+  <link rel="stylesheet" href="navigasyon.css?v=261104.1013">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
@@ -121,7 +121,7 @@
       <div class="hiz-sinir" id="hiz-sinir" hidden title="Hız sınırı"><span id="hiz-sinir-deger"></span></div>
       <div class="ozet-metin">
         <span class="sure-buyuk" id="kalan-sure">-</span>
-        <span class="ozet-alt"><span id="kalan-mesafe">-</span> · <span id="varis">-</span> varış</span>
+        <span class="ozet-alt"><span id="kalan-mesafe">-</span> · <span id="varis">-</span> varış<span id="paylasim-rozet" class="rozet" hidden> · paylaşılıyor</span></span>
       </div>
       <button class="dugme" id="baslat" type="button" hidden>Başlat</button>
       <button class="dugme tehlike" id="bitir" type="button" hidden>Bitir</button>
@@ -139,6 +139,8 @@
         <button class="dugme ikincil kucuk durak-ekle" id="durak-ekle" type="button" hidden>Durak ekle</button>
         <button class="dugme ikincil kucuk" id="ev-kaydet" type="button" hidden>Ev yap</button>
         <button class="dugme ikincil kucuk" id="is-kaydet" type="button" hidden>İş yap</button>
+        <button class="dugme ikincil kucuk" id="varis-paylas" type="button" hidden>Varışımı paylaş</button>
+        <button class="dugme ikincil kucuk" id="varis-baglanti" type="button" hidden>Bağlantıyı kopyala</button>
         <button class="dugme ikincil kucuk" id="paylas" type="button" hidden>Paylaş</button>
         <button class="dugme ikincil kucuk" id="ses" type="button" hidden>Ses: açık</button>
         <button class="dugme ikincil kucuk" id="sapma" type="button" hidden>Sapma dene</button>
@@ -149,7 +151,9 @@
 
   <button class="dugme yuzen" id="ortala" type="button" hidden>Ortala</button>
 
+  <div class="bildirim" id="bildirim" role="status" hidden></div>
+
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261104.0953"></script>
+  <script type="module" src="navigasyon.js?v=261104.1013"></script>
 </body>
 </html>

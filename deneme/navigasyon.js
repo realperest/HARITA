@@ -51,6 +51,8 @@ const HIZ_ASIM_TOLERANS_KMH = 5;
 const HIZ_ASIM_ARDISIK = 3;
 const HIZ_UYARI_ARALIK_MS = 45000;
 const SON_YER_MAKS = 6;
+/** Varis paylasiminda konum en sik bu araliklarla gonderilir. */
+const PAYLASIM_ARALIK_MS = 4000;
 const KOYU_KATMAN = KATMANLAR.find((k) => k.kod === 'v-dark');
 const ACIK_KATMAN = KATMANLAR.find((k) => k.kod === 'v-light');
 
@@ -94,6 +96,7 @@ const durum = {
   secilenAlt: 0,
   ilerleme: 0,
   yolTarifiAcik: false,
+  paylasim: null,
   yoldaTur: null,
   yolda: [],
   hizAsimSayac: 0,
@@ -873,6 +876,10 @@ function arayuzGuncelle() {
   $('ev-kaydet').hidden = mod !== 'onizleme';
   $('is-kaydet').hidden = mod !== 'onizleme';
   $('yolda').hidden = mod === 'plan';
+  $('varis-paylas').hidden = !nav;
+  $('varis-paylas').textContent = durum.paylasim ? 'Paylaşımı durdur' : 'Varışımı paylaş';
+  $('varis-baglanti').hidden = !nav || !durum.paylasim;
+  $('paylasim-rozet').hidden = !durum.paylasim;
   $('durak-ekle').textContent = durum.durakEkle ? 'Durak ekleniyor: arayın ya da dokunun' : 'Durak ekle';
   $('durak-ekle').classList.toggle('etkin', durum.durakEkle);
   $('ses').textContent = durum.ses ? 'Ses: açık' : 'Ses: kapalı';
@@ -1005,6 +1012,7 @@ function konumGeldi(k) {
   if (yolda) sesliUyarilar(rota, o.ilerleme, k.hiz);
   ozetYaz(kalanSure(rota, o.ilerleme), kalanM, k.hiz);
   if (yolda) hizLimitiGoster(rota, o.ilerleme, k.hiz);
+  paylasimGonder(k, rota, o.ilerleme);
   kameraGuncelle(gosterilen, yon, k.hiz);
 }
 
@@ -1365,6 +1373,7 @@ async function navBaslat() {
 
 /** Navigasyonu bitirir. Varildiysa hedef temizlenir, degilse rota onizlemesine donulur. */
 function navBitir(varildi = false) {
+  paylasimiDurdur(varildi);
   simDurdur();
   ekranAcikTut(false);
   arkaPlanKoru(false);
@@ -1434,6 +1443,104 @@ function alternatifDokunmasi(olay) {
   const hedef = diger[Number(bulunan[0].layer.id.slice(-1))];
   if (hedef) rotaSec(durum.alternatifler.indexOf(hedef));
   return true;
+}
+
+/* ---------- Varisi paylas ---------- */
+
+/** Kisa sureli bildirim (4,5 sn). */
+function bildir(metin) {
+  const kutu = $('bildirim');
+  kutu.textContent = metin;
+  kutu.hidden = false;
+  clearTimeout(bildir.zamanlayici);
+  bildir.zamanlayici = setTimeout(() => { kutu.hidden = true; }, 4500);
+}
+
+/** Tahmin edilemez takip kodu (15 karakter, karisik harf ve rakam). */
+function rastgeleKod(uzunluk = 15) {
+  const harfler = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  return [...crypto.getRandomValues(new Uint8Array(uzunluk))].map((b) => harfler[b % harfler.length]).join('');
+}
+
+/** Paylasim kapaliysa baslatir ve baglantiyi paylasir; aciksa durdurur. Yalniz navigasyondayken. */
+async function varisPaylasDegistir() {
+  if (durum.paylasim) {
+    paylasimiDurdur(false);
+    bildir('Paylaşım durduruldu.');
+    return;
+  }
+  if (durum.mod !== 'nav' || !durum.rota) return;
+  const kanal = `y${rastgeleKod()}`;
+  const adres = new URL(`takip.html?k=${kanal}`, location.href).href;
+  durum.paylasim = { kanal, adres, son: 0, hata: 0 };
+  arayuzGuncelle();
+  paylasimGonder(durum.konum, durum.rota, durum.ilerleme, true);
+  const ad = durum.hedef?.ad;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Varışımı takip et', text: `${ad ? `${ad} yolculuğumu` : 'Yolculuğumu'} canlı takip edebilirsin.`, url: adres });
+    } else {
+      await navigator.clipboard.writeText(adres);
+      bildir('Takip bağlantısı kopyalandı.');
+    }
+  } catch (hata) {
+    if (hata?.name === 'AbortError') {
+      paylasimiDurdur(false);
+      bildir('Paylaşım iptal edildi.');
+      return;
+    }
+    console.warn('Takip bağlantısı paylaşılamadı', hata);
+    bildir('Bağlantı paylaşılamadı; "Bağlantıyı kopyala" düğmesini deneyin.');
+  }
+}
+
+async function paylasimBaglantisiniKopyala() {
+  if (!durum.paylasim) return;
+  try {
+    await navigator.clipboard.writeText(durum.paylasim.adres);
+    bildir('Takip bağlantısı kopyalandı.');
+  } catch (hata) {
+    console.warn('Bağlantı kopyalanamadı', hata);
+    bildir('Bağlantı kopyalanamadı.');
+  }
+}
+
+/** Konumu ve varis bilgisini (kalan sure / mesafe, tahmini varis) canli kanala gonderir; en sik 4 sn'de bir. */
+function paylasimGonder(k, rota, ilerleme, zorla = false) {
+  const p = durum.paylasim;
+  if (!p || !k || !rota) return;
+  const simdi = Date.now();
+  if (!zorla && simdi - p.son < PAYLASIM_ARALIK_MS) return;
+  p.son = simdi;
+  const kalanSn = Math.round(kalanSure(rota, ilerleme));
+  const govde = {
+    id: 'surucu', lat: k.lat, lon: k.lon,
+    veri: {
+      kalanM: Math.round(Math.max(0, rota.toplam - ilerleme)), kalanSn, varis: new Date(simdi + kalanSn * 1000).toISOString(),
+      hedefAd: durum.hedef?.ad, hedef: durum.hedef ? { lat: durum.hedef.lat, lon: durum.hedef.lon } : undefined, bitti: false,
+    },
+  };
+  if (Number.isFinite(k.hiz)) govde.hiz = Math.min(100, Math.max(0, k.hiz));
+  if (Number.isFinite(k.yon)) govde.yon = ((k.yon % 360) + 360) % 360;
+  if (Number.isFinite(k.dogruluk)) govde.dogruluk = Math.min(10000, Math.max(0, k.dogruluk));
+  api(`/v1/canli/${p.kanal}/konum`, { method: 'POST', body: JSON.stringify(govde) }).then(() => { p.hata = 0; }).catch((hata) => {
+    p.hata += 1;
+    console.warn('Konum paylaşılamadı', hata);
+    if (p.hata === 5) bildir('Paylaşım bağlantısı kesildi, yeniden deneniyor.');
+  });
+}
+
+/** Paylasimi bitirir; izleyen sayfaya "bitti" (varildiysa "vardi") bilgisi gonderilir. */
+function paylasimiDurdur(varildi = false) {
+  const p = durum.paylasim;
+  if (!p) return;
+  durum.paylasim = null;
+  const k = durum.konum;
+  if (k) {
+    api(`/v1/canli/${p.kanal}/konum`, { method: 'POST', body: JSON.stringify({ id: 'surucu', lat: k.lat, lon: k.lon, veri: { bitti: true, varildi } }) })
+      .catch((hata) => console.warn('Paylaşım bitişi gönderilemedi', hata));
+  }
+  arayuzGuncelle();
 }
 
 /* ---------- Yolda ara ---------- */
@@ -1888,6 +1995,8 @@ function olaylariBagla() {
     else { aramaSirasi += 1; kayitliYerleriYaz(); }
   });
   $('hedef-ara').addEventListener('focus', () => { if (!$('hedef-ara').value.trim() && durum.mod !== 'nav') kayitliYerleriYaz(); });
+  $('varis-paylas').addEventListener('click', varisPaylasDegistir);
+  $('varis-baglanti').addEventListener('click', paylasimBaglantisiniKopyala);
   $('ev-kaydet').addEventListener('click', () => hedefiKaydet('ev'));
   $('is-kaydet').addEventListener('click', () => hedefiKaydet('is'));
   yoldaTurleriYaz();
