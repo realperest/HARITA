@@ -243,9 +243,24 @@ html, body {
 .durak-no { flex: none; min-width: 44px; color: var(--metin-ikincil); font-family: var(--font-sayi); font-size: 12px; }
 .durak-ad { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .durak-sil { flex: none; padding: 2px 8px; background: none; border: 1px solid var(--sinir); border-radius: var(--radius-buton); color: var(--metin-ikincil); font: inherit; font-size: 12px; cursor: pointer; }
-.hizli { margin-top: 10px; }
-.hizli:has(button[hidden]) { display: none; }
-.cip.durak-ekle.etkin { border-color: var(--uyari); color: var(--uyari); }
+.ince-dugme { padding: 0 2px; background: none; border: 0; color: var(--ikincil); font: inherit; font-size: 13px; cursor: pointer; }
+.ince-dugme::before { content: "· "; color: var(--metin-ikincil); }
+.ince-dugme:focus-visible { outline: 2px solid var(--ikincil); outline-offset: 2px; }
+.durak-mod {
+  position: fixed;
+  top: calc(var(--kenar) + env(safe-area-inset-top));
+  left: var(--kenar);
+  z-index: 4;
+  width: min(520px, calc(100% - 2 * var(--kenar) - 44px));
+  display: flex;
+  align-items: center;
+  padding: 2px 2px 2px 14px;
+  background: var(--yuzey);
+  border: 1px solid var(--uyari);
+  border-radius: var(--radius-kart);
+}
+.durak-mod-metin { flex: 1; min-width: 0; color: var(--uyari); font-size: 14px; }
+.arama.altta { top: calc(var(--kenar) + 50px + env(safe-area-inset-top)); }
 
 /* Konum isareti */
 .konum-isaret { width: 34px; height: 34px; }

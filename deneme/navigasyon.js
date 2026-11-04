@@ -108,6 +108,7 @@ const durum = {
   duraklar: [],
   gecilenDurak: 0,
   durakEkle: false,
+  durakAra: false,
   rota: null,
   rotaSayac: 0,
   mod: 'plan',
@@ -946,8 +947,13 @@ function rotayaSigdir(rota) {
 function arayuzGuncelle() {
   const { mod } = durum;
   const nav = mod === 'nav';
-  $('plan').hidden = nav && !durum.durakEkle;
-  $('manevra').hidden = !nav || durum.durakEkle;
+  const durakModu = durum.durakEkle;
+  // Durak modunda arama kutusu kendiliginden acilmaz; arama dugmesine basilirsa seridin altinda acilir
+  $('plan').hidden = durakModu ? !durum.durakAra : nav;
+  $('plan').classList.toggle('altta', durakModu);
+  $('durak-mod').hidden = !durakModu;
+  $('durak-ara').hidden = durum.durakAra;
+  $('manevra').hidden = !nav || durakModu;
   $('alt-ipucu').hidden = mod !== 'plan';
   $('ozet').hidden = mod === 'plan';
   $('sayfa-tutac').hidden = mod === 'plan';
@@ -960,7 +966,7 @@ function arayuzGuncelle() {
   $('ortala').hidden = !nav || durum.takip;
   $('sapma').hidden = !(nav && durum.simAcik);
   $('sim-hiz-alan').hidden = !durum.simAcik;
-  $('durak-ekle').hidden = mod === 'plan';
+  $('durak-ekle').hidden = mod === 'plan' || durakModu;
   $('ev-kaydet').hidden = mod !== 'onizleme';
   $('is-kaydet').hidden = mod !== 'onizleme';
   $('yolda').hidden = mod === 'plan';
@@ -968,8 +974,6 @@ function arayuzGuncelle() {
   $('varis-paylas').textContent = durum.paylasim ? 'Paylaşımı durdur' : 'Varışımı paylaş';
   $('varis-baglanti').hidden = !nav || !durum.paylasim;
   $('paylasim-rozet').hidden = !durum.paylasim;
-  $('durak-ekle').textContent = durum.durakEkle ? 'Durak ekleniyor: arayın ya da haritaya dokunun' : '+ Durak ekle';
-  $('durak-ekle').classList.toggle('etkin', durum.durakEkle);
   $('ses').textContent = durum.ses ? 'Ses: açık' : 'Ses: kapalı';
   $('ses-onay').checked = durum.ses;
   $('tercih-bolum').hidden = durum.profil === 'yaya';
@@ -1195,6 +1199,7 @@ async function hedefSec(hedef) {
   if (durum.durakEkle && durum.duraklar.length) durum.duraklar.push(hedef);
   else durum.duraklar = [hedef];
   durum.durakEkle = false;
+  durum.durakAra = false;
   // Yolda gecilen duraklar korunur; onizlemede yeni secimle bastan baslanir
   if (!yolda) durum.gecilenDurak = 0;
   durum.hedef = hedef;
@@ -2028,7 +2033,8 @@ const aramaYap = gecikmeli(async (q) => {
 /** Haritaya dokunulan noktayi hedef yapar; adini ters aramayla bulur. */
 async function haritaDokunma(olay) {
   if (durum.mod === 'nav' && !durum.durakEkle) return;
-  if (alternatifDokunmasi(olay)) return;
+  // Durak modunda dokunus durak ekler; alternatif rota secmez
+  if (!durum.durakEkle && alternatifDokunmasi(olay)) return;
   const { lat, lng } = olay.lngLat;
   const hedef = { lat, lon: lng, ad: 'Haritadan seçilen nokta' };
   hedefSec(hedef);
@@ -2151,13 +2157,28 @@ function olaylariBagla() {
     // Stil tamamen yenilenir; rota, hedef ve manevra katmanlari style.load ile geri eklenir
     harita.setStyle(stilKur(), { diff: false });
   });
-  $('durak-ekle').addEventListener('click', () => {
-    durum.durakEkle = !durum.durakEkle;
-    // Yolda arama kutusu gecici acilir; harita gorunsun diye alt sayfa kapatilir
-    if (durum.durakEkle && durum.mod === 'nav') sayfaAc(false);
+  // Durak ekleme modu: haritaya dokunarak eklenir; arama kutusu yalniz arama dugmesine basilirsa acilir
+  const durakModuKapat = () => {
+    durum.durakEkle = false;
+    durum.durakAra = false;
+    $('sonuclar').replaceChildren();
+    $('hedef-ara').value = '';
+    $('hedef-ara').blur();
     arayuzGuncelle();
-    if (durum.durakEkle) $('hedef-ara').focus();
+  };
+  $('durak-ekle').addEventListener('click', () => {
+    durum.durakEkle = true;
+    durum.durakAra = false;
+    if (durum.mod === 'nav') sayfaAc(false);
+    arayuzGuncelle();
   });
+  $('durak-ara').addEventListener('click', () => {
+    durum.durakAra = true;
+    arayuzGuncelle();
+    $('hedef-ara').focus();
+  });
+  $('durak-iptal').addEventListener('click', durakModuKapat);
+  document.addEventListener('keydown', (o) => { if (o.key === 'Escape' && durum.durakEkle && !$('cekmece').classList.contains('acik')) durakModuKapat(); });
   $('baslat').addEventListener('click', () => { sesiAc(); navBaslat(); });
   $('ses-dene').addEventListener('click', sesiDene);
   document.addEventListener('pointerdown', sesiAc, { once: true, passive: true });

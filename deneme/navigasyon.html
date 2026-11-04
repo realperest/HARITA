@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261104.1108">
+  <link rel="stylesheet" href="navigasyon.css?v=261104.1123">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
@@ -28,6 +28,17 @@
     <ul class="liste" id="sonuclar"></ul>
     <p class="mesaj" id="plan-mesaj" role="status"></p>
   </section>
+
+  <!-- Durak ekleme modu: haritaya dokunarak ekle; arama dugmesi isteyen icin arama kutusunu acar -->
+  <div class="durak-mod" id="durak-mod" hidden>
+    <span class="durak-mod-metin">Durak için haritaya dokunun</span>
+    <button class="ikon-dugme" id="durak-ara" type="button" aria-label="Durak ara">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+    </button>
+    <button class="ikon-dugme" id="durak-iptal" type="button" aria-label="Durak eklemekten vazgeç">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
 
   <!-- Sol cekmece: ayarlar (cekince ya da menu ile acilir) -->
   <div class="perde" id="perde" hidden></div>
@@ -123,12 +134,11 @@
       <div class="hiz-sinir" id="hiz-sinir" hidden title="Hız sınırı"><span id="hiz-sinir-deger"></span></div>
       <div class="ozet-metin">
         <span class="sure-buyuk" id="kalan-sure">-</span>
-        <span class="ozet-alt"><span id="kalan-mesafe">-</span> · <span id="varis">-</span> varış<span id="paylasim-rozet" class="rozet" hidden> · paylaşılıyor</span></span>
+        <span class="ozet-alt"><span id="kalan-mesafe">-</span> · <span id="varis">-</span> varış<span id="paylasim-rozet" class="rozet" hidden> · paylaşılıyor</span><button class="ince-dugme" id="durak-ekle" type="button" hidden>+ durak</button></span>
       </div>
       <button class="dugme" id="baslat" type="button" hidden>Başlat</button>
       <button class="dugme tehlike" id="bitir" type="button" hidden>Bitir</button>
     </div>
-    <div class="cipler hizli" id="hizli"><button class="cip durak-ekle" id="durak-ekle" type="button" hidden>+ Durak ekle</button></div>
     <div class="alternatifler" id="alternatifler" role="group" aria-label="Alternatif rotalar" hidden></div>
     <div class="sayfa-detay" id="sayfa-detay">
       <ol class="durak-listesi" id="durak-listesi" aria-label="Duraklar"></ol>
@@ -156,6 +166,6 @@
   <div class="bildirim" id="bildirim" role="status" hidden></div>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261104.1108"></script>
+  <script type="module" src="navigasyon.js?v=261104.1123"></script>
 </body>
 </html>
