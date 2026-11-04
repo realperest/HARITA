@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="navigasyon.css?v=261104.0945">
+  <link rel="stylesheet" href="navigasyon.css?v=261104.0953">
 </head>
 <body>
   <div id="harita" class="harita" aria-label="Harita"></div>
@@ -72,6 +72,11 @@
     <div class="bolum">
       <h2>Rota dosyası</h2>
       <label class="dugme ikincil kucuk dosya-sec">GPX yükle<input type="file" id="gpx-yukle" accept=".gpx,application/gpx+xml" hidden></label>
+      <div class="eylemler disa">
+        <button class="dugme ikincil kucuk" id="gpx-indir" type="button" hidden>GPX indir</button>
+        <button class="dugme ikincil kucuk" id="google-ac" type="button" hidden>Google'da aç</button>
+        <button class="dugme ikincil kucuk" id="yandex-ac" type="button" hidden>Yandex'te aç</button>
+      </div>
       <label class="anahtar" title="GPX'teki çizilmiş yolu izler; kapalıysa duraklar arasında en hızlı yol hesaplanır"><span>GPX izini takip et</span><input type="checkbox" id="iz-takip" checked></label>
     </div>
 
@@ -113,6 +118,7 @@
     <p class="ipucu" id="alt-ipucu">Hedef seçin: arayın ya da haritaya dokunun.</p>
     <div class="sayfa-ozet" id="ozet" hidden>
       <div class="hiz-kutu" id="hiz-kutu" hidden><span class="hiz-deger" id="hiz">0</span><span class="hiz-birim">km/sa</span></div>
+      <div class="hiz-sinir" id="hiz-sinir" hidden title="Hız sınırı"><span id="hiz-sinir-deger"></span></div>
       <div class="ozet-metin">
         <span class="sure-buyuk" id="kalan-sure">-</span>
         <span class="ozet-alt"><span id="kalan-mesafe">-</span> · <span id="varis">-</span> varış</span>
@@ -124,12 +130,16 @@
     <div class="sayfa-detay" id="sayfa-detay">
       <ol class="durak-listesi" id="durak-listesi" aria-label="Duraklar"></ol>
       <p class="mesaj hava" id="hava" hidden></p>
+      <div class="yolda" id="yolda">
+        <h3 class="alt-baslik">Yolda ara</h3>
+        <div class="cipler" id="yolda-turler" role="group" aria-label="Yolda ara"></div>
+        <ul class="liste yolda-liste" id="yolda-sonuc"></ul>
+      </div>
       <div class="eylemler">
         <button class="dugme ikincil kucuk durak-ekle" id="durak-ekle" type="button" hidden>Durak ekle</button>
+        <button class="dugme ikincil kucuk" id="ev-kaydet" type="button" hidden>Ev yap</button>
+        <button class="dugme ikincil kucuk" id="is-kaydet" type="button" hidden>İş yap</button>
         <button class="dugme ikincil kucuk" id="paylas" type="button" hidden>Paylaş</button>
-        <button class="dugme ikincil kucuk" id="gpx-indir" type="button" hidden>GPX indir</button>
-        <button class="dugme ikincil kucuk" id="google-ac" type="button" hidden>Google'da aç</button>
-        <button class="dugme ikincil kucuk" id="yandex-ac" type="button" hidden>Yandex'te aç</button>
         <button class="dugme ikincil kucuk" id="ses" type="button" hidden>Ses: açık</button>
         <button class="dugme ikincil kucuk" id="sapma" type="button" hidden>Sapma dene</button>
         <button class="dugme ikincil kucuk" id="iptal" type="button" hidden>İptal</button>
@@ -140,6 +150,6 @@
   <button class="dugme yuzen" id="ortala" type="button" hidden>Ortala</button>
 
   <footer class="surum" id="surum" aria-label="Sürüm geçmişi"></footer>
-  <script type="module" src="navigasyon.js?v=261104.0945"></script>
+  <script type="module" src="navigasyon.js?v=261104.0953"></script>
 </body>
 </html>

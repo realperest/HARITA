@@ -37,6 +37,20 @@ const KATMANLAR = [
   { kod: 'mt-streets', grup: 'MapTiler', ad: 'Sokak (MapTiler)', tur: 'mt', harita: 'streets-v2', uzanti: 'png', acik: true },
   { kod: 'mt-osm', grup: 'MapTiler', ad: 'Ayrıntılı (MapTiler)', tur: 'mt', harita: 'openstreetmap', uzanti: 'png', acik: true },
 ];
+const YER_DEPO = 'harita_nav_yerler';
+/** "Yolda ara" turleri (HARITA yer turu kodlari). */
+const YOLDA_TURLERI = [
+  { kod: 'akaryakit', ad: 'Yakıt' }, { kod: 'yeme_icme', ad: 'Yemek' }, { kod: 'eczane', ad: 'Eczane' },
+  { kod: 'banka', ad: 'ATM / Banka' }, { kod: 'market', ad: 'Market' }, { kod: 'otel', ad: 'Otel' },
+];
+const YOLDA_TAMPON_M = 800;
+const YOLDA_KOORD_MAKS = 1500;
+/** Hiz limiti sorgusunda bir istekteki rota noktasi sayisi. */
+const HIZ_PARCA_NOKTA = 500;
+const HIZ_ASIM_TOLERANS_KMH = 5;
+const HIZ_ASIM_ARDISIK = 3;
+const HIZ_UYARI_ARALIK_MS = 45000;
+const SON_YER_MAKS = 6;
 const KOYU_KATMAN = KATMANLAR.find((k) => k.kod === 'v-dark');
 const ACIK_KATMAN = KATMANLAR.find((k) => k.kod === 'v-light');
 
@@ -80,6 +94,10 @@ const durum = {
   secilenAlt: 0,
   ilerleme: 0,
   yolTarifiAcik: false,
+  yoldaTur: null,
+  yolda: [],
+  hizAsimSayac: 0,
+  sonHizUyari: 0,
   simAcik: false,
   simHiz: 50,
   konum: null,
@@ -100,7 +118,7 @@ const durum = {
   izleme: null,
   ekranKilidi: null,
   ilkKonum: true,
-  cizim: { 'rota-alt-0': BOS, 'rota-alt-1': BOS, 'rota-tum': BOS, 'rota-kalan': BOS, hedef: BOS, 'manevra-nokta': BOS, uyari: BOS },
+  cizim: { yolda: BOS, 'rota-alt-0': BOS, 'rota-alt-1': BOS, 'rota-tum': BOS, 'rota-kalan': BOS, hedef: BOS, 'manevra-nokta': BOS, uyari: BOS },
 };
 const simDurum = { d: 0, sapma: 0, sapmaAdim: 0, zamanlayici: null };
 let harita = null;
@@ -406,6 +424,7 @@ function rotaAyarla(rota) {
   veriYaz('rota-kalan', cizgi(rota.koord));
   veriYaz('manevra-nokta', BOS);
   veriYaz('uyari', BOS);
+  yoldaTemizle();
   uyarilariGetir(rota);
 }
 
@@ -754,6 +773,11 @@ function kaplamaKur() {
   kat({ id: 'uyari-hiz', type: 'symbol', source: 'uyari', minzoom: 13,
     layout: { 'text-field': ['get', 'hiz'], 'text-font': ['Noto Sans Medium'], 'text-size': 9, 'text-allow-overlap': true },
     paint: { 'text-color': '#FFFFFF' } });
+  kat({ id: 'yolda', type: 'circle', source: 'yolda',
+    paint: { 'circle-radius': 8, 'circle-color': '#BC8CFF', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2 } });
+  kat({ id: 'yolda-ad', type: 'symbol', source: 'yolda', minzoom: 12,
+    layout: { 'text-field': ['get', 'ad'], 'text-font': ['Noto Sans Medium'], 'text-size': 11, 'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-max-width': 8 },
+    paint: { 'text-color': '#E6EDF3', 'text-halo-color': '#0E1116', 'text-halo-width': 1.5 } });
   kat({ id: 'hedef', type: 'circle', source: 'hedef',
     paint: {
       'circle-radius': ['case', ['get', 'son'], 10, 9],
@@ -837,6 +861,7 @@ function arayuzGuncelle() {
   $('ozet').hidden = mod === 'plan';
   $('sayfa-tutac').hidden = mod === 'plan';
   $('hiz-kutu').hidden = !nav;
+  if (!nav) $('hiz-sinir').hidden = true;
   $('baslat').hidden = mod !== 'onizleme';
   $('iptal').hidden = mod !== 'onizleme';
   $('bitir').hidden = !nav;
@@ -845,6 +870,9 @@ function arayuzGuncelle() {
   $('sapma').hidden = !(nav && durum.simAcik);
   $('sim-hiz-alan').hidden = !durum.simAcik;
   $('durak-ekle').hidden = mod !== 'onizleme';
+  $('ev-kaydet').hidden = mod !== 'onizleme';
+  $('is-kaydet').hidden = mod !== 'onizleme';
+  $('yolda').hidden = mod === 'plan';
   $('durak-ekle').textContent = durum.durakEkle ? 'Durak ekleniyor: arayın ya da dokunun' : 'Durak ekle';
   $('durak-ekle').classList.toggle('etkin', durum.durakEkle);
   $('ses').textContent = durum.ses ? 'Ses: açık' : 'Ses: kapalı';
@@ -976,6 +1004,7 @@ function konumGeldi(k) {
   if (yolda) sesliYonlendir(rota, i, manevraM, k.hiz);
   if (yolda) sesliUyarilar(rota, o.ilerleme, k.hiz);
   ozetYaz(kalanSure(rota, o.ilerleme), kalanM, k.hiz);
+  if (yolda) hizLimitiGoster(rota, o.ilerleme, k.hiz);
   kameraGuncelle(gosterilen, yon, k.hiz);
 }
 
@@ -1019,6 +1048,7 @@ async function yenidenRota(k) {
     const yeni = await rotaIste(k, kalanDuraklar(k), durum.gecilenDurak);
     if (durum.mod !== 'nav') return;
     rotaAyarla(yeni);
+    hizLimitiYukle(yeni);
     durum.sapmaSayac = 0;
     if (durum.simAcik) Object.assign(simDurum, { d: 0, sapma: 0, sapmaAdim: 0 });
   } catch (hata) {
@@ -1070,6 +1100,7 @@ async function hedefSec(hedef) {
   durum.durakEkle = false;
   durum.gecilenDurak = 0;
   durum.hedef = hedef;
+  sonYerEkle(hedef);
   $('sonuclar').replaceChildren();
   $('hedef-ara').value = '';
   duraklariCiz();
@@ -1324,6 +1355,7 @@ async function navBaslat() {
   sayfaAc(false);
   ekranAcikTut(true);
   arkaPlanKoru(true);
+  hizLimitiYukle(durum.rota);
   const ilk = durum.rota.manevralar[0];
   durum.soylenen.set(`${durum.rota.no}:0`, { uzak: true, yakin: true });
   soyle(`Navigasyon başladı. ${buyukBasla(ilk?.verbal_pre_transition_instruction || '')}`, true);
@@ -1402,6 +1434,203 @@ function alternatifDokunmasi(olay) {
   const hedef = diger[Number(bulunan[0].layer.id.slice(-1))];
   if (hedef) rotaSec(durum.alternatifler.indexOf(hedef));
   return true;
+}
+
+/* ---------- Yolda ara ---------- */
+
+/** Tur dugmelerini (yakit, yemek, eczane...) cizer; secili olan vurgulanir, yeniden dokunmak kapatir. */
+function yoldaTurleriYaz() {
+  const kutu = $('yolda-turler');
+  kutu.replaceChildren();
+  for (const t of YOLDA_TURLERI) {
+    const etkin = durum.yoldaTur === t.kod;
+    const dugme = el('button', { type: 'button', sinif: `cip${etkin ? ' etkin' : ''}`, 'aria-pressed': String(etkin), metin: t.ad });
+    dugme.addEventListener('click', () => (etkin ? yoldaTemizle() : yoldaAra(t.kod)));
+    kutu.append(dugme);
+  }
+}
+
+/** Haritadaki ve listedeki "yolda ara" sonuclarini temizler. */
+function yoldaTemizle() {
+  durum.yoldaTur = null;
+  durum.yolda = [];
+  veriYaz('yolda', BOS);
+  $('yolda-sonuc').replaceChildren();
+  yoldaTurleriYaz();
+}
+
+/** Rotanin kalan bolumunden en fazla enFazla noktalik seyreltilmis [boylam, enlem] listesi. */
+function kalanRotaNoktalari(rota, enFazla = YOLDA_KOORD_MAKS) {
+  const kalan = rota.koord.slice(Math.max(0, rota.segman));
+  const adim = Math.max(1, Math.ceil(kalan.length / enFazla));
+  return kalan.filter((_, i) => i % adim === 0 || i === kalan.length - 1);
+}
+
+/** Rotanin kalan kismi boyunca secilen turdeki yerleri bulur; en yakindan baslayarak siralar. */
+async function yoldaAra(tur) {
+  const rota = durum.rota;
+  if (!rota) return;
+  durum.yoldaTur = tur;
+  durum.yolda = [];
+  veriYaz('yolda', BOS);
+  yoldaTurleriYaz();
+  const liste = $('yolda-sonuc');
+  liste.replaceChildren(el('li', {}, el('span', { sinif: 'ayrinti', metin: 'Aranıyor...' })));
+  const kalanM = Math.max(1, rota.toplam - (durum.mod === 'nav' ? durum.ilerleme : 0));
+  try {
+    const v = await api('/v1/adres/rota-boyunca', {
+      method: 'POST',
+      body: JSON.stringify({ koordinatlar: kalanRotaNoktalari(rota), tur, tampon_m: YOLDA_TAMPON_M, limit: 12 }),
+    });
+    if (durum.rota !== rota || durum.yoldaTur !== tur) return;
+    durum.yolda = v.map((y) => ({
+      ad: y.ad || 'Adsız', lat: y.merkez.lat, lon: y.merkez.lon,
+      ileriM: Math.round((y.ek?.rota_orani ?? 0) * kalanM), uzakM: Math.round(y.mesafe_m ?? 0),
+    })).sort((a, b) => a.ileriM - b.ileriM);
+    veriYaz('yolda', {
+      type: 'FeatureCollection',
+      features: durum.yolda.map((y) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [y.lon, y.lat] }, properties: { ad: y.ad } })),
+    });
+    yoldaSonucYaz();
+  } catch (hata) {
+    console.warn('Yolda arama başarısız', hata);
+    liste.replaceChildren(el('li', {}, el('span', { sinif: 'ayrinti', metin: hata instanceof HataMesaji ? hata.message : 'Arama yapılamadı.' })));
+  }
+}
+
+function yoldaSonucYaz() {
+  const liste = $('yolda-sonuc');
+  liste.replaceChildren();
+  if (!durum.yolda.length) {
+    liste.append(el('li', {}, el('span', { sinif: 'ayrinti', metin: 'Rota üzerinde bulunamadı.' })));
+    return;
+  }
+  for (const y of durum.yolda) {
+    const dugme = el('button', { type: 'button' }, el('span', { sinif: 'ad', metin: y.ad }),
+      el('span', { sinif: 'ayrinti', metin: `${mesafeYaz(y.ileriM)} ileride · rotaya ${mesafeYaz(y.uzakM)}` }));
+    dugme.addEventListener('click', () => yoldaDurakEkle(y));
+    liste.append(el('li', {}, dugme));
+  }
+}
+
+/** Secilen yeri hedeften once durak olarak ekler; yolda ise rota hemen yeniden hesaplanir. */
+async function yoldaDurakEkle(yer) {
+  const durak = { lat: yer.lat, lon: yer.lon, ad: yer.ad };
+  durum.duraklar.splice(Math.max(0, durum.duraklar.length - 1), 0, durak);
+  duraklarListesiYaz();
+  duraklariCiz();
+  if (durum.mod === 'nav' && durum.konum) {
+    durum.sonYenidenRota = 0;
+    soyle(`${yer.ad} durak olarak eklendi.`);
+    await yenidenRota(durum.konum);
+  } else {
+    await onizlemeHesapla();
+  }
+}
+
+/* ---------- Ev, is ve son yerler ---------- */
+
+function yerleriOku() {
+  const v = depoOku(YER_DEPO);
+  return { ev: v.ev || null, is: v.is || null, son: Array.isArray(v.son) ? v.son : [] };
+}
+
+/** Hedefi son yerlere ekler (40 m icindeki eskisi degistirilir, en fazla SON_YER_MAKS tutulur). */
+function sonYerEkle(hedef) {
+  if (!hedef || !Number.isFinite(hedef.lat)) return;
+  const kayit = { ad: hedef.ad, lat: hedef.lat, lon: hedef.lon };
+  const liste = yerleriOku().son.filter((s) => mesafeM([s.lon, s.lat], [kayit.lon, kayit.lat]) > 40);
+  depoYaz(YER_DEPO, { son: [kayit, ...liste].slice(0, SON_YER_MAKS) });
+}
+
+/** Onizlemedeki hedefi Ev ya da Is olarak kaydeder. */
+function hedefiKaydet(tur) {
+  const h = durum.duraklar.at(-1);
+  if (!h) return;
+  depoYaz(YER_DEPO, { [tur]: { ad: h.ad, lat: h.lat, lon: h.lon } });
+  planMesaj(`${tur === 'ev' ? 'Ev' : 'İş'} olarak kaydedildi: ${h.ad}`, 'basari');
+}
+
+/** Arama kutusu bos ve odakliyken Ev, Is ve son hedefleri listeler. */
+function kayitliYerleriYaz() {
+  const liste = $('sonuclar');
+  liste.replaceChildren();
+  const y = yerleriOku();
+  const ogeler = [];
+  if (y.ev) ogeler.push({ ...y.ev, etiket: 'Ev' });
+  if (y.is) ogeler.push({ ...y.is, etiket: 'İş' });
+  y.son.forEach((s) => ogeler.push({ ...s, etiket: 'Son' }));
+  for (const o of ogeler) {
+    const dugme = el('button', { type: 'button' },
+      el('span', { sinif: 'ad', metin: o.etiket === 'Son' ? o.ad : `${o.etiket}: ${o.ad}` }),
+      el('span', { sinif: 'ayrinti', metin: o.etiket === 'Son' ? 'Son hedef' : 'Kayıtlı yer' }));
+    dugme.addEventListener('click', () => hedefSec({ lat: o.lat, lon: o.lon, ad: o.ad }));
+    liste.append(el('li', {}, dugme));
+  }
+}
+
+/* ---------- Hiz limiti ---------- */
+
+/**
+ * Rotanin yol hiz limitlerini (OSM "maxspeed" verisi) Valhalla trace_attributes ile parca parca ister.
+ * rota.hizSegmanlari: [{bas, son, limit}] (metre, rota basindan; limiti kayitsiz yollar listede yoktur, gosterge cikmaz).
+ */
+async function hizLimitiYukle(rota) {
+  rota.hizSegmanlari = [];
+  if (durum.profil === 'yaya') return;
+  const n = rota.koord.length;
+  for (let bas = 0; bas < n - 1; bas += HIZ_PARCA_NOKTA - 1) {
+    const parca = rota.koord.slice(bas, Math.min(n, bas + HIZ_PARCA_NOKTA));
+    if (parca.length < 2) break;
+    try {
+      const v = await api('/valhalla/trace_attributes', {
+        method: 'POST',
+        body: JSON.stringify({
+          shape: parca.map(([lon, lat]) => ({ lat, lon })), costing: COSTING[durum.profil], shape_match: 'edge_walk',
+          filters: { attributes: ['edge.speed_limit', 'edge.begin_shape_index', 'edge.end_shape_index'], action: 'include' },
+        }),
+      });
+      if (durum.rota !== rota) return;
+      for (const e of v.edges || []) {
+        if (!e.speed_limit) continue;
+        const b = rota.kum[Math.min(n - 1, bas + e.begin_shape_index)];
+        const s = rota.kum[Math.min(n - 1, bas + e.end_shape_index)];
+        if (s > b) rota.hizSegmanlari.push({ bas: b, son: s, limit: e.speed_limit });
+      }
+    } catch (hata) {
+      console.warn('Hız limitleri alınamadı', hata);
+    }
+  }
+}
+
+/** Rotada verilen ilerlemedeki hiz limiti (km/sa); kayitli degilse null. */
+function hizLimitiBul(rota, ilerleme) {
+  const seg = rota.hizSegmanlari;
+  if (!seg?.length) return null;
+  let alt = 0;
+  let ust = seg.length - 1;
+  while (alt <= ust) {
+    const orta = (alt + ust) >> 1;
+    if (seg[orta].son < ilerleme) alt = orta + 1;
+    else if (seg[orta].bas > ilerleme) ust = orta - 1;
+    else return seg[orta].limit;
+  }
+  return null;
+}
+
+/** Limit tabelasini gosterir; hiz limiti asilirsa gosterge kirmizi olur ve (45 sn'de bir) sesli uyarilir. */
+function hizLimitiGoster(rota, ilerleme, hizMs) {
+  const limit = hizLimitiBul(rota, ilerleme);
+  $('hiz-sinir').hidden = limit == null;
+  if (limit != null) $('hiz-sinir-deger').textContent = String(limit);
+  const kmsa = Number.isFinite(hizMs) ? hizMs * 3.6 : 0;
+  const asim = limit != null && kmsa > limit + HIZ_ASIM_TOLERANS_KMH;
+  $('hiz-kutu').classList.toggle('hizli', asim);
+  durum.hizAsimSayac = asim ? durum.hizAsimSayac + 1 : 0;
+  if (durum.hizAsimSayac >= HIZ_ASIM_ARDISIK && Date.now() - durum.sonHizUyari > HIZ_UYARI_ARALIK_MS) {
+    durum.sonHizUyari = Date.now();
+    soyle(`Hız sınırı ${limit}. Hızınızı azaltın.`);
+  }
 }
 
 /* ---------- Paneller: alt sayfa, sol cekmece, yol tarifi ---------- */
@@ -1601,6 +1830,7 @@ async function haritaDokunma(olay) {
     const o = v.features?.[0]?.properties;
     if (o?.name && durum.duraklar.includes(hedef)) {
       hedef.ad = [o.name, o.housenumber].filter(Boolean).join(' ');
+      sonYerEkle(hedef);
       duraklarListesiYaz();
     }
   } catch (hata) {
@@ -1653,7 +1883,14 @@ async function haritaYapilandirmasi() {
 }
 
 function olaylariBagla() {
-  $('hedef-ara').addEventListener('input', (o) => aramaYap(o.target.value));
+  $('hedef-ara').addEventListener('input', (o) => {
+    if (o.target.value.trim()) aramaYap(o.target.value);
+    else { aramaSirasi += 1; kayitliYerleriYaz(); }
+  });
+  $('hedef-ara').addEventListener('focus', () => { if (!$('hedef-ara').value.trim() && durum.mod !== 'nav') kayitliYerleriYaz(); });
+  $('ev-kaydet').addEventListener('click', () => hedefiKaydet('ev'));
+  $('is-kaydet').addEventListener('click', () => hedefiKaydet('is'));
+  yoldaTurleriYaz();
   $('hedef-ara').addEventListener('keydown', (o) => {
     if (o.key === 'Enter') $('sonuclar').querySelector('button')?.click();
   });
